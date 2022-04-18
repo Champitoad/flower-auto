@@ -1,0 +1,7 @@
+(library
+ (name prover)
+ (libraries batteries))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))

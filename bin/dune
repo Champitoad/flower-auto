@@ -1,0 +1,10 @@
+(executable
+ (public_name prover)
+ (name main)
+ (libraries prover)
+ (flags -w -26)
+ )
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))
