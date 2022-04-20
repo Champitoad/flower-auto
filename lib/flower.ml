@@ -14,6 +14,14 @@ let atom_of s =
 let atoms_of =
   List.map atom_of
 
+let atomic = function
+  | Atom _ -> true
+  | _ -> false
+
+let atom = function
+  | Atom a -> a
+  | _ -> failwith "Non-atomic flower"
+
 let pistil = function
   | Atom _ -> failwith "Atomic flowers do not have a pistil"
   | Flower (p, _) -> p
@@ -110,19 +118,19 @@ end = struct
       (Random.int params.max_flowers)
       (fun _ -> gen_flower bound params)
   
+  (** In order to cover flowers where all subflowers are different, we can
+      lower-bound the pool of atom identifiers by an upper bound on the
+      size of the generated flower. The closer it is to the least upper
+      bound, the likier it is to generate a correct flower. *)
+  let upper_bound (params : params) : int =
+    (* BatInt.pow ((params.max_petals + 1) * params.max_flowers) params.depth / 500 *)
+    5
+
   let gen_flower ?(params = defaults) () =
-    (* In order to cover flowers where all subflowers are different, we can
-        lower-bound the pool of atom identifiers by an upper bound on the
-        size of the generated flower. The closer it is to the least upper
-        bound, the likier it is to generate a correct flower. *)
-    let upper_bound =
-      BatInt.pow ((params.max_petals + 1) * params.max_flowers) params.depth in
-    gen_flower upper_bound params
+    gen_flower (upper_bound params) params
 
   let gen_garden ?(params = defaults) () =
-    let upper_bound =
-      BatInt.pow ((params.max_petals + 1) * params.max_flowers) params.depth in
-    gen_garden upper_bound params
+    gen_garden (upper_bound params) params
   
   module Correct = struct
     let rec gen_flower ctx params =
@@ -167,7 +175,7 @@ end = struct
         try List.(init nb_atoms
             (fun _ -> nth ctx (Random.int (length ctx + 1))))
         (* The empty garden is the only correct garden in an empty context *)
-        with Failure _ -> [] in
+        with _ -> [] in
 
       let flowers = List.init nb_flowers
         (fun _ -> gen_flower ctx params) in
@@ -207,7 +215,7 @@ let reproduction_data (f : flower) : garden * garden list * garden list =
           List.find empty_pistil p
           with Not_found -> raise (Sterile f)
         end in
-      BatList.remove p scrutinee, petals scrutinee, petals f
+      List.remove p scrutinee, petals scrutinee, petals f
 
 let reproducible (f : flower) : bool =
   try
@@ -222,7 +230,7 @@ let assumptions_flower, assumptions_garden =
       (f |> string_of_flower); *)
     match f with
     (* Insemination *)
-    | _ when BatSet.mem f ctx -> Set.empty
+    | _ when Set.mem f ctx -> Set.empty
     (* Stem *)
     | Atom a -> Set.singleton a
     (* Reproduction *)
@@ -234,15 +242,22 @@ let assumptions_flower, assumptions_garden =
         aux_f ctx reproduction
     (* Transport *)
     | Flower (p, ps) ->
-        let assums = aux_g ctx p |> Set.map atom_of in
-        ps |> List.map (fun p -> aux_g (Set.union ctx assums) p) |>
-        Set.of_list |> Set.intersectionf "⊥"
+        if List.is_empty ps then
+          Set.singleton "⊥"
+        else
+          let assums = aux_g ctx p |> Set.map atom_of in
+          let ctx = Set.([ctx; Set.of_list p; assums] |> of_list |> unionf) in
+          let ps = List.map (aux_g ctx) ps in
+          if List.exists Set.is_empty ps then
+            Set.empty
+          else
+            ps |> Set.of_list |> Set.unionf
 
   and aux_g (ctx : flower Set.t) : garden -> string Set.t = function
     (* Garden *)
     | fs ->
         fs |> Set.of_list |> Set.union_map begin fun f ->
-          let pruned = BatList.remove fs f |> Set.of_list in
+          let pruned = List.remove fs f |> Set.of_list in
           aux_f (Set.union ctx pruned) f
         end
 
@@ -251,3 +266,54 @@ let assumptions_flower, assumptions_garden =
 let check_flower, check_garden =
   (assumptions_flower |>> Set.is_empty,
    assumptions_garden |>> Set.is_empty)
+
+let reproduction (g : garden) : garden =
+  let rec aux_f f =
+    if reproducible f then
+      let hyps, lhs, rhs = reproduction_data f in
+      let reproduction =
+        let branches = lhs |> List.map (fun p -> Flower (p, rhs)) in
+        Flower (hyps, [branches]) in
+      aux_f reproduction
+    else
+      match f with
+      | Flower (p, ps) -> Flower (aux_g p, List.map aux_g ps)
+      | _ -> f
+  and aux_g g =
+    List.map aux_f g
+  in aux_g g
+
+let decomposition (g : garden) : garden =
+  let rec aux_f f =
+    match f with
+    | Atom _ -> [f]
+    | Flower ([Flower ([Atom _ as a], [])], []) -> [a]
+    | Flower (_, ps) when List.(exists is_empty ps) -> []
+    | Flower ([], [p]) -> aux_g p
+    | Flower (p, ps) -> [Flower (aux_g p, List.map aux_g ps)]
+  and aux_g g =
+    List.concat_map aux_f g
+  in aux_g g
+
+let pollination (g : garden) : garden =
+  let rec aux_f (ctx : string Set.t) f =
+    match f with
+    | Flower (p, ps) ->
+        let ap, _ = List.partition atomic p in
+        let ctx' = Set.(union ctx (ap |> of_list |> map atom)) in
+        let pistil = aux_g ctx p in
+        let petals = List.map (aux_g ctx') ps in
+        [Flower (pistil, petals)]
+    | _ -> assert false
+  and aux_g ctx g =
+    let ag, ng = List.partition atomic g in
+    let ctx' = Set.(union ctx (ag |> of_list |> map atom)) in
+    List.diff ag (ctx |> Set.to_list |> atoms_of) @
+    List.concat_map (aux_f ctx') ng
+  in aux_g Set.empty g
+
+let life : garden -> garden =
+  fixpoint (reproduction |>> pollination |>> decomposition)
+
+let check : garden -> bool =
+  life |>> List.is_empty

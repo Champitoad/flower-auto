@@ -3,14 +3,18 @@ let identity = fun x -> x
 let (|>>) f g = fun x -> g (f x)
 let (<<|) f g = fun x -> f (g x)
 
+let rec fixpoint (f : 'a -> 'a) x =
+  let y = f x in
+  if y = x then x else (fixpoint f) y
+
 module List = struct
-  include List
+  include BatList
 
   let diff l l' =
-    BatList.remove_if (fun a -> List.mem a l') l
+    remove_if (fun a -> List.mem a l') l
 
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
-    List.map print |>> String.concat sep |>> fun s -> left ^ s ^ right
+    map print |>> String.concat sep |>> fun s -> left ^ s ^ right
 end
 
 module Set = struct
