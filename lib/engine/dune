@@ -1,0 +1,14 @@
+(ocamllex lexer)
+
+(menhir
+  (modules parser)
+  (flags --explain --inspection --table --dump))
+
+(library
+  (name engine)
+  (public_name prover.engine)
+  (libraries lwt menhirLib batteries tyxml ocamlgraph)
+  (preprocess (pps tyxml-ppx lwt_ppx))
+  (synopsis "Mini-prover (engine library)")
+;  (flags -w -8)
+  )
