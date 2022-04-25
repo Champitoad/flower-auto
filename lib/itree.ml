@@ -102,6 +102,9 @@ let desc t p =
 let is_desc t t' =
   is_subpath (path t) (path t')
 
+let in_same_tree t t' =
+  root t == root t'
+
 (** Least common ancestor *)
 let lca t1 t2 =
   let r, p1 = root_path t1 in

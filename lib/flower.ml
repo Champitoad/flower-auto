@@ -635,6 +635,7 @@ let decomposition (t : gtree) : unit =
         (* Empty petal *)
         if List.(exists empty_garden petals) then begin
           Itree.remove_child parent t.index;
+          Itree.link parent
         end
         else begin
           match empty_pistil t, petals with
@@ -642,14 +643,15 @@ let decomposition (t : gtree) : unit =
           | true, [g] ->
               Itree.remove_child parent t.index;
               flowers g |> List.iter begin fun f ->
-                let f = Itree.{ f with index = t.index + f.index } in
+                Itree.insert_child parent t.index f;
+                Itree.link parent;
                 aux f;
-                Itree.insert_child parent t.index f
               end
           (* Default flower *)
           | _ ->
               aux (pistil t);
-              List.iter aux petals
+              Itree.link parent;
+              List.iter (fun c -> aux c; Itree.link parent) petals
         end;
       (* Garden *)
       with NotAFlower _ ->
@@ -660,7 +662,7 @@ let pollination (t : gtree) : unit =
   let v = vehicle t in
   v.pos |> List.iter begin fun p ->
     v.neg |> List.iter begin fun n ->
-      if name p = name n then begin
+      if name p = name n && Itree.in_same_tree p n then begin
         let anc = Itree.lca p n in
         let { pol; kind; _ } = Itree.node_data anc in
 
@@ -682,6 +684,9 @@ let pollination (t : gtree) : unit =
             (src_top_pistil || src_in_petal)) in
         
         if valid then begin
+          Printf.printf "[veh] %s\n" (string_of_vehicle v);
+          Printf.printf "[src] %s\n" (string_of_node src);
+          Printf.printf "[tgt] %s\n" (string_of_node tgt);
           (* Compute path from ancestor to target *)
           let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
 
@@ -730,11 +735,11 @@ let pollination (t : gtree) : unit =
 
 let lifecycle (t : gtree) : unit =
   reproduction t;
-  Printf.printf "[r]: %s\n" (string_of_node t);
+  (* Printf.printf "[r]: %s\n" (string_of_node t); *)
   pollination t;
-  Printf.printf "[p]: %s\n" (string_of_node t);
-  decomposition t;
-  Printf.printf "[d]: %s\n" (string_of_node t)
+  (* Printf.printf "[p]: %s\n" (string_of_node t); *)
+  decomposition t
+  (* Printf.printf "[d]: %s\n" (string_of_node t) *)
 
 let life (g : garden) : garden =
   let t = ref (garden_to_gtree g) in

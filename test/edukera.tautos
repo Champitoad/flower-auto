@@ -77,12 +77,15 @@ P, Q |- ~P || Q -> P -> Q
 P, Q, R |- P && (Q -> R) <-> P && Q -> P && R
 P, Q, R |- P && (Q || R) <-> (P && Q) || (P && R)
 P, Q, R |- P || (Q && R) <-> (P || Q) && (P || R)
-P, Q, R |- P || (Q -> R) <-> (P || Q) -> (P || R)
 P, Q, R |- P -> (Q && R) <-> (P -> Q) && (P -> R)
 P, Q, R |- P -> (Q || R) <-> (P -> Q) || (P -> R)
-P, Q, R |- P -> (Q -> R) <-> (P -> Q) -> (P -> R)
+P, Q, R |- (P -> (Q -> R)) <-> ((P -> Q) -> (P -> R))
 
 ### Relations
 
 A, B, C |- (A || B -> C) <-> (A -> C) && (B -> C)
-A, B, C |- (A && B -> C) <-> (A -> C) || (B -> C)
+
+# Infinite loop
+
+P, Q, R |- P || (Q -> R) -> (P || Q) -> (P || R)
+A, B, C |- (A -> C) || (B -> C) -> (A && B -> C)

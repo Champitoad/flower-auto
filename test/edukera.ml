@@ -18,7 +18,7 @@ let parse_tautos file =
 
 let () =
   Printexc.record_backtrace true;
-  parse_tautos "test/edukera.tautos" |>
+  parse_tautos "test/loop.tautos" |>
   List.map begin fun form ->
     form, Flower.of_form form
   end |>
