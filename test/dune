@@ -1,2 +1,5 @@
-(test
- (name prover))
+(tests
+ (names edukera trees fbintrees)
+ (libraries prover)
+ (flags -w -26)
+ )

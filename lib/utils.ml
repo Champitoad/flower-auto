@@ -7,14 +7,42 @@ let rec fixpoint (f : 'a -> 'a) x =
   let y = f x in
   if y = x then x else (fixpoint f) y
 
+module Option = struct
+  include BatOption
+
+  let to_string print = function
+    | None -> "None"
+    | Some x -> print x
+end
+
 module List = struct
   include BatList
 
+  let subsetq l l' =
+    List.for_all (fun x -> List.memq x l') l
+
+  let same_elements_q l l' =
+    subsetq l l' && subsetq l' l
+
   let diff l l' =
     remove_if (fun a -> List.mem a l') l
+  
+  (** Greatest Common Prefix *)
+  let rec gcp l l' =
+    match l, l' with
+    | a :: l, a' :: l' when a = a' ->
+        a :: gcp l l'
+    | _ -> []
 
   let to_string ?(sep = "; ") ?(left = "[") ?(right = "]") print =
     map print |>> String.concat sep |>> fun s -> left ^ s ^ right
+end
+
+module Array = struct
+  include BatArray
+
+  let from (i : int) (t : 'a t) : 'a t =
+    Array.init (Array.length t - i) (fun j -> t.(i+j))
 end
 
 module Set = struct

@@ -3,8 +3,10 @@ open Utils
 (* -------------------------------------------------------------------- *)
 (** Syntax *)
 
+type name = string
+
 type flower =
-  | Atom of string
+  | Atom of name
   | Flower of garden * garden list
 and garden = flower list
 
@@ -42,6 +44,66 @@ let rec string_of_flower = function
 
 and string_of_garden g =
   List.to_string ~sep:", " ~left:"" ~right:"" string_of_flower g
+
+let string_of_garden_path, string_of_flower_path =
+  let rec aux_f (f : flower) (sub : Itree.path) : string =
+    match sub with
+    | [] ->
+        Printf.sprintf "\027[1;31m%s\027[0m" (string_of_flower f)
+    | i :: sub ->
+        match f with
+        | Atom a -> a
+        | Flower (p, ps) ->
+            let gs = 
+              p :: ps |> List.mapi begin fun j g ->
+                let s =
+                  if i = j then aux_g g sub
+                  else string_of_garden g in
+                if j = 0 then s else s ^ ";"
+              end in
+            let pistil = List.hd gs in
+            let petals = List.tl gs |> String.concat " " in
+            Printf.sprintf "(%s ⊢ %s)" pistil petals
+
+  and aux_g (g : garden) (sub : Itree.path) : string =
+    match sub with
+    | [] ->
+        Printf.sprintf "\027[1;32m%s\027[0m" (string_of_garden g)
+    | i :: sub ->
+        let g = 
+          g |> List.mapi begin fun j f ->
+            if i = j then aux_f f sub
+            else string_of_flower f
+          end in
+        List.to_string ~sep:", " ~left:"" ~right:"" identity g
+  
+  in aux_g, aux_f
+
+(* -------------------------------------------------------------------- *)
+(** Conversion to/from formulas *)
+
+let rec of_form (f : Engine.Fo.form) : garden =
+  let open Engine.Fo in
+  match f with
+  | FPred (a, []) ->
+      [Atom a]
+  | FTrue ->
+      []
+  | FFalse ->
+      [Flower ([], [])]
+  | FConn (`And, [f1; f2]) ->
+      of_form f1 @ of_form f2
+  | FConn (`Or, [f1; f2]) ->
+      [Flower ([], [of_form f1; of_form f2])]
+  | FConn (`Imp, [f1; f2]) ->
+      [Flower (of_form f1, [of_form f2])]
+  | FConn (`Not, [f1]) ->
+      [Flower (of_form f1, [])]
+  | FConn (`Equiv, [f1; f2]) ->
+      [Flower (of_form f1, [of_form f2])] @
+      [Flower (of_form f2, [of_form f1])]
+  | _ ->
+      failwith "Non-propositional formula"
 
 (* -------------------------------------------------------------------- *)
 (** Generate random flowers *)
@@ -190,13 +252,14 @@ end = struct
   end
 end
 
-(* Correctness criterion *)
+(* -------------------------------------------------------------------- *)
+(** Proof search *)
 
 let empty_pistil : flower -> bool = function
   | Flower ([], _) -> true
   | _ -> false
 
-exception Sterile of flower
+exception Sterile
 
 (** [reproduction_data f] searches for the first stamen [scrutinee] with an
     empty pistil inside the pistil of [f], and returns the pattern-matching
@@ -208,12 +271,12 @@ exception Sterile of flower
     @raise Sterile [f] if there is no such stamen. *)
 let reproduction_data (f : flower) : garden * garden list * garden list =
   match f with
-  | Atom _ -> raise (Sterile f)
+  | Atom _ -> raise Sterile
   | Flower (p, _) ->
       let scrutinee =
         begin try
           List.find empty_pistil p
-          with Not_found -> raise (Sterile f)
+          with Not_found -> raise Sterile
         end in
       List.remove p scrutinee, petals scrutinee, petals f
 
@@ -221,10 +284,10 @@ let reproducible (f : flower) : bool =
   try
     let _ = reproduction_data f in
     true
-  with Sterile _ -> false
+  with Sterile -> false
 
 let assumptions_flower, assumptions_garden =
-  let rec aux_f (ctx : flower Set.t) (f : flower) : string Set.t =
+  let rec aux_f (ctx : flower Set.t) (f : flower) : name Set.t =
     (* Printf.printf "%s : %s\n"
       (ctx |> Set.to_list |> string_of_garden)
       (f |> string_of_flower); *)
@@ -253,7 +316,7 @@ let assumptions_flower, assumptions_garden =
           else
             ps |> Set.of_list |> Set.unionf
 
-  and aux_g (ctx : flower Set.t) : garden -> string Set.t = function
+  and aux_g (ctx : flower Set.t) : garden -> name Set.t = function
     (* Garden *)
     | fs ->
         fs |> Set.of_list |> Set.union_map begin fun f ->
@@ -296,24 +359,392 @@ let decomposition (g : garden) : garden =
   in aux_g g
 
 let pollination (g : garden) : garden =
-  let rec aux_f (ctx : string Set.t) f =
+  let rec aux_f (ctx : flower Set.t) f =
     match f with
     | Flower (p, ps) ->
-        let ap, _ = List.partition atomic p in
-        let ctx' = Set.(union ctx (ap |> of_list |> map atom)) in
+        let ctx' = Set.(union ctx (of_list p)) in
         let pistil = aux_g ctx p in
         let petals = List.map (aux_g ctx') ps in
-        [Flower (pistil, petals)]
-    | _ -> assert false
+        Flower (pistil, petals)
+    | Atom _ -> f
   and aux_g ctx g =
-    let ag, ng = List.partition atomic g in
-    let ctx' = Set.(union ctx (ag |> of_list |> map atom)) in
-    List.diff ag (ctx |> Set.to_list |> atoms_of) @
-    List.concat_map (aux_f ctx') ng
+    (* Printf.printf "%s : %s\n"
+      (ctx |> Set.to_list |> string_of_garden)
+      (g |> string_of_garden); *)
+    let g = Set.(diff (of_list g) ctx) in
+    let ctx = Set.map (aux_f g) ctx in
+    let ctx = Set.union ctx g in
+    Set.(map (fun f -> aux_f (remove f ctx) f) g |> to_list)
   in aux_g Set.empty g
 
-let life : garden -> garden =
-  fixpoint (reproduction |>> pollination |>> decomposition)
+(* -------------------------------------------------------------------- *)
+(** Efficient pollination algorithm *)
+
+type pol = Pos | Neg
+
+let inv = function
+  | Pos -> Neg
+  | Neg -> Pos
+
+type kind = [`Flower | `Garden]
+type zone = [`Pistil | `Petal]
+
+type amdata =
+  { name : name; mutable justified : bool }
+
+type pmdata =
+  { pol : pol; kind : kind; zone : zone }
+
+type gtree = (pmdata, amdata) Itree.t
+
+type vehicle =
+  { pos : gtree list; neg : gtree list }
+
+let string_of_amdata { name; justified } : string =
+  if justified then
+    Printf.sprintf "\027[1;32m%s\027[0m" name
+  else
+    Printf.sprintf "\027[1;31m%s\027[0m" name
+
+let string_of_pol = function
+  | Pos -> "+" | Neg -> "-"
+
+let string_of_kind = function
+  | `Flower -> "F" | `Garden -> "G"
+
+let string_of_pmdata { pol; kind; zone } : string =
+  let pol = string_of_pol pol in
+  let kind = string_of_kind kind in
+  let polkind = pol ^ kind in
+  match zone with
+  | `Pistil -> polkind ^ "⊢"
+  | `Petal -> "⊢" ^ polkind
+
+let string_of_gtree : gtree -> string =
+  Itree.to_string string_of_amdata string_of_pmdata
+
+let string_of_vehicle (v : vehicle) : string =
+  let string_of_atom (t : gtree) =
+    let amdata = Itree.leaf_data t in
+    let { pol; _ } = Itree.node_data t in
+    Printf.sprintf "%s%s"
+      (string_of_pol pol)
+      (string_of_amdata amdata) in
+
+  let string_of_atoms =
+    List.to_string ~left:"" ~right:"" ~sep:", " string_of_atom in
+
+  Printf.sprintf "%s | %s"
+    (string_of_atoms v.pos)
+    (string_of_atoms v.neg)
+    
+
+exception NotAnAtom of gtree
+exception NotAFlower of gtree
+exception NotAGarden of gtree
+
+let kind (t : gtree) : kind =
+  match t.data with
+  | Leaf ({ kind; _ }, _) ->
+      if kind = `Garden then
+        failwith "Leaves cannot be gardens";
+      kind
+  | Node ({ kind; _ }) -> kind
+
+let atom (t : gtree) : gtree =
+  match t.data with
+  | Leaf ({ kind = `Flower; _ }, _) -> t
+  | _ -> raise (NotAnAtom t)
+
+let flower (t : gtree) : gtree =
+  match t.data with
+  | Node ({ kind = `Flower; _ }) -> t
+  | _ -> raise (NotAFlower t)
+
+let garden (t : gtree) : gtree =
+  match t.data with
+  | Node ({ kind = `Garden; _ }) -> t
+  | _ -> raise (NotAGarden t)
+
+let name (t : gtree) : name =
+  (t |> atom |> Itree.leaf_data).name
+
+let pistil (t : gtree) : gtree =
+  Itree.child (flower t) 0
+
+let petals (t : gtree) : gtree list =
+  BatDynArray.(tail (flower t).children 1 |> to_list)
+
+let flowers (t : gtree) : gtree list =
+  (garden t).children |> BatDynArray.to_list
+
+let eq_vehicle (v : vehicle) (v' : vehicle) : bool =
+  Utils.List.same_elements_q v.pos v'.pos &&
+  Utils.List.same_elements_q v.neg v'.neg
+
+let append_vehicle { pos = p; neg = n } { pos = p'; neg = n' } =
+  { pos = p @ p'; neg = n @ n' }
+
+let concat_vehicle =
+  List.fold_left append_vehicle { pos = []; neg = [] }
+
+let vehicle (t : gtree) : vehicle =
+  let rec aux (t : gtree) : vehicle =
+    match t.data with
+    | Leaf ({ pol; _ }, _) ->
+        let pos, neg = match pol with
+          | Pos -> [t], []
+          | Neg -> [], [t] in
+        { pos; neg }
+    | Node (_) ->
+        t.children |> BatDynArray.to_list |>
+        List.map aux |> concat_vehicle
+  in aux t
+
+let eq_atom (t : gtree) (t' : gtree) : bool =
+  Itree.(leaf_data t = leaf_data t')
+
+let justify_atom (t : gtree) : unit =
+  t.data <- Itree.(Leaf (node_data t, { (leaf_data t) with justified = true }))
+
+let eq_gtree (t : gtree) (t' : gtree) : bool =
+  let eq_data d d' =
+    let open Itree in
+    match d, d' with
+    | Leaf (nd, ad), Leaf (nd', ad') ->
+        nd = nd' &&
+        ad.name = ad'.name
+    | Node (nd : pmdata), Node nd' ->
+        nd = nd'
+    | _ ->
+        false in
+  Itree.eq ~eq_data t t'
+
+let garden_to_gtree (g : garden) : gtree =
+  let rec build_f (index : int) (pmdata : pmdata) (f : flower) : gtree =
+    match f with
+    | Atom name ->
+        let data = Itree.Leaf ({ pmdata with kind = `Flower }, { name; justified = false; }) in
+        { parent = None; index; children = BatDynArray.create (); data }
+    | Flower (p, ps) ->
+        let children =
+          let pistil =
+            let t = build_g 0 { pmdata with pol = inv pmdata.pol; zone = `Pistil } p in
+            BatDynArray.of_list [t] in
+          let petals =
+            let ts =
+              ps |> List.mapi begin fun i p ->
+                build_g (i+1) { pmdata with zone = `Petal } p
+              end in
+            BatDynArray.of_list ts in
+          BatDynArray.append petals pistil;
+          pistil in
+        let data = Itree.Node ({ pmdata with kind = `Flower }) in
+        { parent = None; index; children; data }
+
+  and build_g (index : int) (pmdata : pmdata) (g : garden) : gtree =
+    let children =
+      g |> List.mapi (fun i f -> build_f i pmdata f) |> BatDynArray.of_list in
+    let data = Itree.Node ({ pmdata with kind = `Garden }) in
+    { parent = None; index; children; data }
+  in
+
+  let t = build_g 0 { pol = Pos; kind = `Garden; zone = `Petal } g in
+  Itree.link t;
+  t
+
+let gtree_to_garden (t : gtree) : garden =
+  let rec aux_f (t : gtree) : flower =
+    try
+      Atom (name t)
+    with NotAnAtom _ ->
+      let pistil = t |> pistil |> aux_g in
+      let petals = t |> petals |> List.map aux_g in
+      Flower (pistil, petals)
+  and aux_g (t : gtree) : garden =
+    (flowers t) |> List.map aux_f
+  in
+  match kind t with
+  | `Flower -> [aux_f t]
+  | `Garden -> aux_g t
+
+let string_of_node (t : gtree) : string =
+  string_of_garden_path (gtree_to_garden (Itree.root t)) (Itree.path t)
+
+let empty_pistil (t : gtree) : bool =
+  try BatDynArray.empty (pistil t).children
+  with NotAFlower _ -> false
+
+let empty_garden (t : gtree) : bool =
+  List.is_empty (flowers t)
+
+let reproduction (t : gtree) : unit =
+  let scrutinee (t : gtree) : gtree =
+    try BatDynArray.find empty_pistil (pistil t).children
+    with Not_found -> raise Sterile
+  in
+  let rec aux (t : gtree) : unit =
+    try
+      let _ = atom t in ()
+    with NotAnAtom u when u == t ->
+      try
+        let scrutinee = scrutinee t in
+        let rhs = petals t in
+        let pol = (Itree.node_data t).pol in
+
+        let branches : gtree list =
+          petals scrutinee |> List.mapi begin fun i p ->
+            let children = BatDynArray.of_list (Itree.{ p with index = 0 } :: rhs) in
+            let data = Itree.(Node ({ pol; kind = `Flower; zone = `Petal })) in
+            Itree.{ parent = None; index = i; children; data }
+          end in
+
+        let petal =
+          let children = branches |> BatDynArray.of_list in
+          let data = Itree.(Node ({ pol; kind = `Garden; zone = `Petal })) in
+          Itree.{ parent = None; index = 1; children; data } in
+        
+        (* Remove scrutinee *)
+        Itree.remove_child (pistil t) scrutinee.index;
+        (* Remove petals *)
+        for i = (BatDynArray.length t.children - 1) downto 1 do
+          Itree.remove_child t i
+        done;
+        (* Replace them with the new petal containing the branches *)
+        Itree.insert_child t 1 petal;
+        Itree.link t;
+        (* Repeat *)
+        aux t
+      with
+      | Sterile ->
+          aux (pistil t);
+          List.iter aux (petals t)
+      | NotAFlower u when u == t ->
+          List.iter aux (flowers t)
+  in aux t
+
+let decomposition (t : gtree) : unit =
+  let rec aux (t : gtree) : unit =
+    try
+      (* Atom *)
+      let _ = atom t in ()
+    with NotAnAtom _ ->
+      try
+        let petals = petals t in
+        let parent = t.parent |> Option.get in
+        (* Empty petal *)
+        if List.(exists empty_garden petals) then begin
+          Itree.remove_child parent t.index;
+        end
+        else begin
+          match empty_pistil t, petals with
+          (* Empty pistil *)
+          | true, [g] ->
+              Itree.remove_child parent t.index;
+              flowers g |> List.iter begin fun f ->
+                let f = Itree.{ f with index = t.index + f.index } in
+                aux f;
+                Itree.insert_child parent t.index f
+              end
+          (* Default flower *)
+          | _ ->
+              aux (pistil t);
+              List.iter aux petals
+        end;
+      (* Garden *)
+      with NotAFlower _ ->
+        List.iter (fun c -> aux c; Itree.link t) (flowers t)
+  in aux t
+
+let pollination (t : gtree) : unit =
+  let v = vehicle t in
+  v.pos |> List.iter begin fun p ->
+    v.neg |> List.iter begin fun n ->
+      if name p = name n then begin
+        let anc = Itree.lca p n in
+        let { pol; kind; _ } = Itree.node_data anc in
+
+        let src, tgt =
+          match pol, kind with
+          | Neg, `Garden
+          | Pos, `Flower -> n, p
+          | Pos, `Garden
+          | Neg, `Flower -> p, n in
+
+        let valid =
+          let tgt_justified = (Itree.leaf_data tgt).justified in
+          (not tgt_justified) &&
+          (kind = `Garden ||
+           kind = `Flower &&
+            let pistil = pistil anc in
+            let src_top_pistil = BatDynArray.memq src pistil.children in
+            let src_in_petal = Itree.is_desc pistil tgt in
+            (src_top_pistil || src_in_petal)) in
+        
+        if valid then begin
+          (* Compute path from ancestor to target *)
+          let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
+
+          let src_available =
+            let parent =
+              match kind with
+              | `Garden -> Option.get src.parent
+              | `Flower -> Option.get (Option.get src.parent).parent in
+            parent == anc in
+
+          let new_anc = ref anc in
+          let path_new_anc_tgt = ref path_anc_tgt in
+
+          (* If the source is not directly available at the top-level of the ancestor *)
+          if not src_available then begin
+            (* Make a copy of the direct subflower of the ancestor containing the target *)
+            let subflower =
+              let dist_from_anc =
+                match kind with
+                | `Flower -> 2
+                | `Garden -> 1 in
+              let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
+              Itree.(deepcopy (desc anc path_from_anc)) in
+
+            (* Attach the copy to its new location besides the source *)
+            new_anc := src.parent |> Option.get;
+            Itree.insert_child !new_anc 0 subflower;
+            let tl = match kind with
+              | `Garden -> List.tl path_anc_tgt
+              | `Flower -> List.tl (List.tl path_anc_tgt) in
+            path_new_anc_tgt := 0 :: tl;
+          end;
+
+          (* Remove the (copy of) the target *)
+          let new_tgt = Itree.desc !new_anc !path_new_anc_tgt in
+          let parent = new_tgt.parent |> Option.get in
+          Itree.remove_child parent new_tgt.index;
+
+          justify_atom tgt;
+        end;
+      end;
+    end
+  end
+
+(** Correctness criterion *)
+
+let lifecycle (t : gtree) : unit =
+  reproduction t;
+  Printf.printf "[r]: %s\n" (string_of_node t);
+  pollination t;
+  Printf.printf "[p]: %s\n" (string_of_node t);
+  decomposition t;
+  Printf.printf "[d]: %s\n" (string_of_node t)
+
+let life (g : garden) : garden =
+  let t = ref (garden_to_gtree g) in
+  let t' = ref (Itree.deepcopy !t) in
+  lifecycle !t;
+  while not (eq_gtree !t !t') do
+    t' := Itree.deepcopy !t;
+    lifecycle !t;
+  done;
+  gtree_to_garden !t
 
 let check : garden -> bool =
   life |>> List.is_empty
