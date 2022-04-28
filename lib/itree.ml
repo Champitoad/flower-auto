@@ -129,7 +129,8 @@ let deepcopy ?(copy_data = identity) t =
     let index = t.index in
     let data = copy_data t.data in
     let children = BatDynArray.map aux t.children in
-    let t = { index; data; parent = None; children } in
-    link t; t in
+    { index; data; parent = None; children } in
   let r = root t in
-  desc (aux r) (path t)
+  let r = aux r in
+  link r;
+  desc r (path t)

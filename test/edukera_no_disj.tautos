@@ -1,0 +1,46 @@
+### Implication
+
+A, B, C |- A -> B -> A
+A, B, C |- A -> (A -> B) -> B
+A, B, C |- (B -> C) -> (A -> B) -> (A -> C)
+
+### Conjonction
+
+A, B, C |- A -> B -> A && B
+A, B, C |- A -> B -> C -> A && (B && C)
+A, B, C |- (A && B) -> (C -> A)
+A, B, C |- (A && B) -> (C -> B)
+A, B, C |- (A && B) -> (B && A)
+
+### Basiques
+
+A, B, C |- A && B -> C -> A
+P, Q, R |- P && Q -> R -> Q && R
+
+### Logique constructiviste
+
+A, B, C |- (A -> B -> C) -> ((A -> B) -> A -> C)
+P, Q, R |- (P -> Q -> R) -> P && Q -> R
+A, B, C |- (A -> B) -> (A -> C) -> A -> B && C
+A, B, C |- (A -> B -> C) -> A && B -> C
+P, Q, R |- P -> (P -> Q) -> ((P -> Q) -> (Q -> R)) -> R
+A, B, C |- (A && B -> C) <-> A -> B -> C
+
+### Associativités
+
+A, B, C |- A && (B && C) <-> (A && B) && C
+
+### Distributivités
+
+P, Q, R |- (P -> (Q && R)) <-> (P -> Q) && (P -> R)
+P, Q, R |- P && (Q -> R) -> P && Q -> P && R
+P, Q, R |- (P -> (Q -> R)) -> ((P -> Q) -> (P -> R))
+
+### Classical
+
+P, Q, R |- ((P -> Q) -> P) -> P
+# P, Q, R |- (P && Q -> P && R) -> P && (Q -> R)
+
+### Infinite loop
+
+# P, Q, R |- ((P -> Q) -> (P -> R)) -> (P -> (Q -> R))

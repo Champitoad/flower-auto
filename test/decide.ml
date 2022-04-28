@@ -1,8 +1,7 @@
 open Prover
 
-let parse_tautos file =
-  file |>
-  BatFile.lines_of |>
+let parse_tautos ic =
+  BatIO.lines_of ic |>
   BatEnum.filter begin fun l ->
     let l = BatString.trim l in
     let starts_with c s = BatString.get s 0 = c in
@@ -18,13 +17,15 @@ let parse_tautos file =
 
 let () =
   Printexc.record_backtrace true;
-  parse_tautos "test/loop.tautos" |>
+  parse_tautos BatIO.stdin |>
   List.map begin fun form ->
     form, Flower.of_form form
   end |>
   List.iter begin fun (form, g) ->
-    Printf.printf "%s\n\n" (Engine.Fo.Notation.f_toascii form);
-    Printf.printf "%s\n\n" Flower.(g |> string_of_garden);
+    (* if not (Flower.check g) then begin *)
+      Printf.printf "%s\n\n" (Engine.Fo.Notation.f_toascii form);
+      Printf.printf "%s\n\n" Flower.(g |> string_of_garden);
+    (* end; *)
     (* Printf.printf "%s\n\n" Flower.(life g |> string_of_garden); *)
     Tests.test_life g;
     (* Printf.printf "%s\n\n" Flower.(g |> garden_to_gtree |> string_of_gtree);

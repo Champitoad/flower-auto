@@ -380,11 +380,13 @@ let pollination (g : garden) : garden =
 (* -------------------------------------------------------------------- *)
 (** Efficient pollination algorithm *)
 
-type pol = Pos | Neg
+type pol = int
 
-let inv = function
-  | Pos -> Neg
-  | Neg -> Pos
+let positive (p : pol) =
+  p mod 2 = 0
+
+let negative (p : pol) =
+  p mod 2 = 1
 
 type kind = [`Flower | `Garden]
 type zone = [`Pistil | `Petal]
@@ -393,7 +395,7 @@ type amdata =
   { name : name; mutable justified : bool }
 
 type pmdata =
-  { pol : pol; kind : kind; zone : zone }
+  { pol : pol ; kind : kind; zone : zone }
 
 type gtree = (pmdata, amdata) Itree.t
 
@@ -406,8 +408,8 @@ let string_of_amdata { name; justified } : string =
   else
     Printf.sprintf "\027[1;31m%s\027[0m" name
 
-let string_of_pol = function
-  | Pos -> "+" | Neg -> "-"
+let string_of_pol p =
+  if positive p then "+" else "-"
 
 let string_of_kind = function
   | `Flower -> "F" | `Garden -> "G"
@@ -492,9 +494,7 @@ let vehicle (t : gtree) : vehicle =
   let rec aux (t : gtree) : vehicle =
     match t.data with
     | Leaf ({ pol; _ }, _) ->
-        let pos, neg = match pol with
-          | Pos -> [t], []
-          | Neg -> [], [t] in
+        let pos, neg = if positive pol then [t], [] else [], [t] in
         { pos; neg }
     | Node (_) ->
         t.children |> BatDynArray.to_list |>
@@ -514,11 +514,20 @@ let eq_gtree (t : gtree) (t' : gtree) : bool =
     | Leaf (nd, ad), Leaf (nd', ad') ->
         nd = nd' &&
         ad.name = ad'.name
-    | Node (nd : pmdata), Node nd' ->
+    | Node nd, Node nd' ->
         nd = nd'
     | _ ->
         false in
   Itree.eq ~eq_data t t'
+
+let deepcopy_gtree (t : gtree) : gtree =
+  let open Itree in
+  let copy_data d =
+    match d with
+    | Leaf (nd, ad) ->
+        Leaf (nd, { ad with justified = ad.justified })
+    | _ -> d in 
+  deepcopy ~copy_data t
 
 let garden_to_gtree (g : garden) : gtree =
   let rec build_f (index : int) (pmdata : pmdata) (f : flower) : gtree =
@@ -529,7 +538,7 @@ let garden_to_gtree (g : garden) : gtree =
     | Flower (p, ps) ->
         let children =
           let pistil =
-            let t = build_g 0 { pmdata with pol = inv pmdata.pol; zone = `Pistil } p in
+            let t = build_g 0 { pmdata with pol = pmdata.pol + 1; zone = `Pistil } p in
             BatDynArray.of_list [t] in
           let petals =
             let ts =
@@ -549,7 +558,7 @@ let garden_to_gtree (g : garden) : gtree =
     { parent = None; index; children; data }
   in
 
-  let t = build_g 0 { pol = Pos; kind = `Garden; zone = `Petal } g in
+  let t = build_g 0 { pol = 0; kind = `Garden; zone = `Petal } g in
   Itree.link t;
   t
 
@@ -594,6 +603,7 @@ let reproduction (t : gtree) : unit =
 
         let branches : gtree list =
           petals scrutinee |> List.mapi begin fun i p ->
+            let rhs = List.map deepcopy_gtree rhs in
             let children = BatDynArray.of_list (Itree.{ p with index = 0 } :: rhs) in
             let data = Itree.(Node ({ pol; kind = `Flower; zone = `Petal })) in
             Itree.{ parent = None; index = i; children; data }
@@ -665,28 +675,26 @@ let pollination (t : gtree) : unit =
       if name p = name n && Itree.in_same_tree p n then begin
         let anc = Itree.lca p n in
         let { pol; kind; _ } = Itree.node_data anc in
-
-        let src, tgt =
-          match pol, kind with
-          | Neg, `Garden
-          | Pos, `Flower -> n, p
-          | Pos, `Garden
-          | Neg, `Flower -> p, n in
+        let src, tgt = n, p in
 
         let valid =
-          let tgt_justified = (Itree.leaf_data tgt).justified in
-          (not tgt_justified) &&
-          (kind = `Garden ||
-           kind = `Flower &&
-            let pistil = pistil anc in
-            let src_top_pistil = BatDynArray.memq src pistil.children in
-            let src_in_petal = Itree.is_desc pistil tgt in
-            (src_top_pistil || src_in_petal)) in
-        
+          let tgt_unjustified = not (Itree.leaf_data tgt).justified in
+          tgt_unjustified && begin
+            let garden_and_negative = kind = `Garden && negative pol in
+            garden_and_negative || begin
+              let flower_and_positive = kind = `Flower && positive pol in
+              flower_and_positive && begin
+                let pistil = pistil anc in
+                let src_top_pistil = BatDynArray.memq src pistil.children in
+                let src_in_petal = Itree.is_desc pistil tgt in
+                src_top_pistil || src_in_petal
+              end
+            end
+          end in
+
         if valid then begin
-          Printf.printf "[veh] %s\n" (string_of_vehicle v);
-          Printf.printf "[src] %s\n" (string_of_node src);
-          Printf.printf "[tgt] %s\n" (string_of_node tgt);
+          Printf.printf "[src]: %s\n" (string_of_node src);
+          Printf.printf "[tgt]: %s\n" (string_of_node tgt);
           (* Compute path from ancestor to target *)
           let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
 
@@ -709,7 +717,7 @@ let pollination (t : gtree) : unit =
                 | `Flower -> 2
                 | `Garden -> 1 in
               let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
-              Itree.(deepcopy (desc anc path_from_anc)) in
+              deepcopy_gtree (Itree.desc anc path_from_anc) in
 
             (* Attach the copy to its new location besides the source *)
             new_anc := src.parent |> Option.get;
@@ -725,7 +733,7 @@ let pollination (t : gtree) : unit =
           let parent = new_tgt.parent |> Option.get in
           Itree.remove_child parent new_tgt.index;
 
-          justify_atom tgt;
+          justify_atom new_tgt;
         end;
       end;
     end
@@ -743,10 +751,10 @@ let lifecycle (t : gtree) : unit =
 
 let life (g : garden) : garden =
   let t = ref (garden_to_gtree g) in
-  let t' = ref (Itree.deepcopy !t) in
+  let t' = ref (deepcopy_gtree !t) in
   lifecycle !t;
   while not (eq_gtree !t !t') do
-    t' := Itree.deepcopy !t;
+    t' := deepcopy_gtree !t;
     lifecycle !t;
   done;
   gtree_to_garden !t

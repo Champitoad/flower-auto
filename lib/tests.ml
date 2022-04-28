@@ -38,8 +38,10 @@ let test_life ?(print = false) garden =
     let l = Flower.life [f] in
     if List.is_empty l then incr nb_correct;
     if print = List.is_empty l then begin
-      Printf.printf "[tests] %s\n" (Flower.string_of_flower f);
-      Printf.printf "[tests] %s\n" (Flower.string_of_garden l);
+      Printf.printf "Original: %s\n" (Flower.string_of_flower f);
+      Printf.printf "%s\n" (Flower.([f] |> garden_to_gtree |> vehicle |> string_of_vehicle));
+      Printf.printf "Reduced : %s\n" (Flower.string_of_garden l);
+      Printf.printf "%s\n" (Flower.(l |> garden_to_gtree |> vehicle |> string_of_vehicle));
       print_newline ()
     end
   end;
