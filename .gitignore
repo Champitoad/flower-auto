@@ -8,7 +8,7 @@
 *.cmxs
 *.cmxa
 
-# ocamlbuild working directory
+# oca.diremlbuild working directory
 _build/
 
 # ocamlbuild targets
@@ -27,3 +27,9 @@ setup.log
 
 # Local OPAM switch
 _opam/
+
+.envrc
+.direnv
+.vscode
+test/*.out
+test/iltp

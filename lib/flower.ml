@@ -38,7 +38,7 @@ let petals = function
 let rec string_of_flower = function
   | Atom a -> a
   | Flower (p, ps) ->
-      Printf.sprintf "(%s ⊢ %s)"
+      Printf.sprintf "(%s ⫐ %s)"
         (string_of_garden p)
         (ps |> List.map (string_of_garden |>> fun s -> s ^ ";") |> String.concat " ")
 
@@ -63,7 +63,7 @@ let string_of_garden_path, string_of_flower_path =
               end in
             let pistil = List.hd gs in
             let petals = List.tl gs |> String.concat " " in
-            Printf.sprintf "(%s ⊢ %s)" pistil petals
+            Printf.sprintf "(%s ⫐ %s)" pistil petals
 
   and aux_g (g : garden) (sub : Itree.path) : string =
     match sub with
@@ -419,8 +419,8 @@ let string_of_pmdata { pol; kind; zone } : string =
   let kind = string_of_kind kind in
   let polkind = pol ^ kind in
   match zone with
-  | `Pistil -> polkind ^ "⊢"
-  | `Petal -> "⊢" ^ polkind
+  | `Pistil -> polkind ^ "⫐"
+  | `Petal -> "⫐" ^ polkind
 
 let string_of_gtree : gtree -> string =
   Itree.to_string string_of_amdata string_of_pmdata

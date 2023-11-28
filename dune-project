@@ -1,6 +1,7 @@
 (lang dune 3.0)
 (using menhir 2.1)
 (name prover)
+(version df7b390-dirty)
 
 (generate_opam_files true)
 
@@ -19,7 +20,7 @@
  (name prover)
  (synopsis "A simple prover for the flower calculus")
  (description "A longer description")
- (depends ocaml dune)
+ (depends ocaml dune lwt menhirLib batteries tyxml ocamlgraph tyxml-ppx lwt_ppx)
  (tags
   (topics "to describe" your project)))
 
