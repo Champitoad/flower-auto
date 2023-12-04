@@ -45,6 +45,17 @@ let rec string_of_flower = function
 and string_of_garden g =
   List.to_string ~sep:", " ~left:"" ~right:"" string_of_flower g
 
+let rec latex_of_flower = function
+  | Atom a -> a
+  | Flower (p, ps) ->
+      Printf.sprintf "(\\flower{%s}{%s})"
+        (latex_of_garden p)
+        (ps |> List.map (latex_of_garden |>> fun s -> s ^ "\\sep") |> String.concat " ")
+
+and latex_of_garden g =
+  (* if List.is_empty g then "{}" else *)
+  List.to_string ~sep:", " ~left:"" ~right:"" latex_of_flower g
+
 let string_of_garden_path, string_of_flower_path =
   let rec aux_f (f : flower) (sub : Itree.path) : string =
     match sub with
@@ -580,6 +591,9 @@ let gtree_to_garden (t : gtree) : garden =
 let string_of_node (t : gtree) : string =
   string_of_garden_path (gtree_to_garden (Itree.root t)) (Itree.path t)
 
+let latex_of_node (t : gtree) : string =
+  latex_of_garden (gtree_to_garden t)
+
 let empty_pistil (t : gtree) : bool =
   try BatDynArray.empty (pistil t).children
   with NotAFlower _ -> false
@@ -650,13 +664,13 @@ let decomposition (t : gtree) : unit =
         else begin
           match empty_pistil t, petals with
           (* Empty pistil *)
-          | true, [g] ->
+          (* | true, [g] ->
               Itree.remove_child parent t.index;
               flowers g |> List.iter begin fun f ->
                 Itree.insert_child parent t.index f;
                 Itree.link parent;
                 aux f;
-              end
+              end *)
           (* Default flower *)
           | _ ->
               aux (pistil t);
@@ -741,23 +755,28 @@ let pollination (t : gtree) : unit =
 
 (** Correctness criterion *)
 
-let lifecycle (t : gtree) : unit =
-  reproduction t;
-  (* Printf.printf "[r]: %s\n" (string_of_node t); *)
+let lifecycle ?(printer = None) (t : gtree) : unit =
+  let print phase =
+    match printer with
+    | Some p -> Printf.printf "%s%s\n" phase (p t) 
+    | None -> ()
+  in
   pollination t;
-  (* Printf.printf "[p]: %s\n" (string_of_node t); *)
-  decomposition t
-  (* Printf.printf "[d]: %s\n" (string_of_node t) *)
+  print "[pollination]:   ";
+  reproduction t;
+  print "[reproduction]:  ";
+  decomposition t;
+  print "[decomposition]: "
 
-let life (g : garden) : garden =
+let life ?(printer = None) (g : garden) : garden =
   let t = ref (garden_to_gtree g) in
   let t' = ref (deepcopy_gtree !t) in
-  lifecycle !t;
+  lifecycle ~printer !t;
   while not (eq_gtree !t !t') do
     t' := deepcopy_gtree !t;
-    lifecycle !t;
+    lifecycle ~printer !t;
   done;
   gtree_to_garden !t
 
-let check : garden -> bool =
-  life |>> List.is_empty
+let check ?(printer = None) : garden -> bool =
+  life ~printer |>> List.is_empty

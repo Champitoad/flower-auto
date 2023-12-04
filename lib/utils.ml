@@ -1,5 +1,8 @@
 let identity = fun x -> x
 
+let curry f x y = f (x, y)
+let uncurry f (x, y) = f x y
+
 let (|>>) f g = fun x -> g (f x)
 let (<<|) f g = fun x -> f (g x)
 
