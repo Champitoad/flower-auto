@@ -74,12 +74,14 @@ P, Q |- ~P || Q -> P -> Q
 
 ### Distributivités
 
- P, Q, R |- P && (Q -> R) -> P && Q -> P && R
- P, Q, R |- P && (Q || R) <-> (P && Q) || (P && R)
- P, Q, R |- P || (Q && R) <-> (P || Q) && (P || R)
- P, Q, R |- (P -> (Q && R)) <-> (P -> Q) && (P -> R)
- P, Q, R |- (P -> Q) || (P -> R) -> (P -> (Q || R))
- P, Q, R |- (P -> (Q -> R)) -> ((P -> Q) -> (P -> R))
+P, Q, R |- P && (Q -> R) -> P && Q -> P && R
+P, Q, R |- P && (Q || R) <-> (P && Q) || (P && R)
+P, Q, R |- P || (Q && R) <-> (P || Q) && (P || R)
+P, Q, R |- (P -> Q) && (P -> R) -> (P -> (Q && R))
+P, Q, R |- (P -> (Q && R)) -> (P -> Q) && (P -> R)
+P, Q, R |- (P -> Q) || (P -> R) -> (P -> (Q || R))
+P, Q, R |- (P -> (Q -> R)) -> ((P -> Q) -> (P -> R))
+P, Q, R |- ((P -> Q) -> (P -> R)) -> (P -> (Q -> R))
 
 ### Relations
 
@@ -87,8 +89,7 @@ A, B, C |- (A || B -> C) <-> (A -> C) && (B -> C)
 
 ### Classical logic
 
-# P, Q, R |- (P && Q -> P && R) -> P && (Q -> R)
-# P, Q, R |- (P -> (Q || R)) -> (P -> Q) || (P -> R)
+P, Q, R |- (P -> (Q || R)) -> (P -> Q) || (P -> R)
 
 P, Q |- P || ~P
 P, Q |- P || (P -> Q)
@@ -104,4 +105,4 @@ P, Q |- ~~(((P -> Q) -> P) -> P)
 
 ### Infinite loop
 
-# P, Q, R |- ((P -> Q) -> (P -> R)) -> (P -> (Q -> R))
+# P, Q, R |- (P && Q -> P && R) -> P && (Q -> R)

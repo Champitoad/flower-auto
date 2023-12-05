@@ -402,19 +402,19 @@ let negative (p : pol) =
 type kind = [`Flower | `Garden]
 type zone = [`Pistil | `Petal]
 
-type amdata =
-  { name : name; mutable justified : bool }
-
 type pmdata =
   { pol : pol ; kind : kind; zone : zone }
 
-type gtree = (pmdata, amdata) Itree.t
+type amdata =
+  { name : name; mutable justifiber : gtree list }
+
+and gtree = (pmdata, amdata) Itree.t
 
 type vehicle =
   { pos : gtree list; neg : gtree list }
 
-let string_of_amdata { name; justified } : string =
-  if justified then
+let string_of_amdata { name; justifiber } : string =
+  if not (List.is_empty justifiber) then
     Printf.sprintf "\027[1;32m%s\027[0m" name
   else
     Printf.sprintf "\027[1;31m%s\027[0m" name
@@ -482,6 +482,9 @@ let garden (t : gtree) : gtree =
 let name (t : gtree) : name =
   (t |> atom |> Itree.leaf_data).name
 
+let justifiber (t : gtree) : gtree list =
+  (t |> atom |> Itree.leaf_data).justifiber
+
 let pistil (t : gtree) : gtree =
   Itree.child (flower t) 0
 
@@ -515,8 +518,9 @@ let vehicle (t : gtree) : vehicle =
 let eq_atom (t : gtree) (t' : gtree) : bool =
   Itree.(leaf_data t = leaf_data t')
 
-let justify_atom (t : gtree) : unit =
-  t.data <- Itree.(Leaf (node_data t, { (leaf_data t) with justified = true }))
+let justify_atom (src : gtree) (tgt : gtree) : unit =
+  tgt.data <- Itree.(Leaf (node_data tgt,
+    { (leaf_data tgt) with justifiber = src :: justifiber tgt }))
 
 let eq_gtree (t : gtree) (t' : gtree) : bool =
   let eq_data d d' =
@@ -536,7 +540,7 @@ let deepcopy_gtree (t : gtree) : gtree =
   let copy_data d =
     match d with
     | Leaf (nd, ad) ->
-        Leaf (nd, { ad with justified = ad.justified })
+        Leaf (nd, { ad with justifiber = ad.justifiber })
     | _ -> d in 
   deepcopy ~copy_data t
 
@@ -544,7 +548,7 @@ let garden_to_gtree (g : garden) : gtree =
   let rec build_f (index : int) (pmdata : pmdata) (f : flower) : gtree =
     match f with
     | Atom name ->
-        let data = Itree.Leaf ({ pmdata with kind = `Flower }, { name; justified = false; }) in
+        let data = Itree.Leaf ({ pmdata with kind = `Flower }, { name; justifiber = []; }) in
         { parent = None; index; children = BatDynArray.create (); data }
     | Flower (p, ps) ->
         let children =
@@ -610,7 +614,9 @@ let reproduction (t : gtree) : unit =
     try
       let _ = atom t in ()
     with NotAnAtom u when u == t ->
-      try
+      try 
+        Itree.link t;
+        
         let scrutinee = scrutinee t in
         let rhs = petals t in
         let pol = (Itree.node_data t).pol in
@@ -641,7 +647,7 @@ let reproduction (t : gtree) : unit =
         aux t
       with
       | Sterile ->
-          aux (pistil t);
+          (* aux (pistil t); *)
           List.iter aux (petals t)
       | NotAFlower u when u == t ->
           List.iter aux (flowers t)
@@ -662,7 +668,7 @@ let decomposition (t : gtree) : unit =
           Itree.link parent
         end
         else begin
-          match empty_pistil t, petals with
+          (* match empty_pistil t, petals with *)
           (* Empty pistil *)
           (* | true, [g] ->
               Itree.remove_child parent t.index;
@@ -672,10 +678,14 @@ let decomposition (t : gtree) : unit =
                 aux f;
               end *)
           (* Default flower *)
-          | _ ->
+          (* | _ -> *)
               aux (pistil t);
               Itree.link parent;
-              List.iter (fun c -> aux c; Itree.link parent) petals
+              List.iter (fun c -> aux c; Itree.link parent) petals;
+              if List.(exists empty_garden petals) then begin
+                Itree.remove_child parent t.index;
+                Itree.link parent
+              end
         end;
       (* Garden *)
       with NotAFlower _ ->
@@ -692,7 +702,7 @@ let pollination (t : gtree) : unit =
         let src, tgt = n, p in
 
         let valid =
-          let tgt_unjustified = not (Itree.leaf_data tgt).justified in
+          let tgt_unjustified = not (List.memq src (justifiber tgt)) in
           tgt_unjustified && begin
             let garden_and_negative = kind = `Garden && negative pol in
             garden_and_negative || begin
@@ -747,7 +757,7 @@ let pollination (t : gtree) : unit =
           let parent = new_tgt.parent |> Option.get in
           Itree.remove_child parent new_tgt.index;
 
-          justify_atom new_tgt;
+          justify_atom src tgt;
         end;
       end;
     end
