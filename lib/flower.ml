@@ -638,10 +638,12 @@ let reproduction (t : gtree) : unit =
     with NotAnAtom u when u == t ->
       try 
         Itree.link t;
-        
+
         let scrutinee = scrutinee t in
         let rhs = petals t in
+
         let pol = (Itree.node_data t).pol in
+        (* if negative pol then raise Sterile; *)
 
         let branches : gtree list =
           petals scrutinee |> List.mapi begin fun i p ->
@@ -669,7 +671,7 @@ let reproduction (t : gtree) : unit =
         aux t
       with
       | Sterile ->
-          (* aux (pistil t); *)
+          aux (pistil t);
           List.iter aux (petals t)
       | NotAFlower u when u == t ->
           List.iter aux (flowers t)
