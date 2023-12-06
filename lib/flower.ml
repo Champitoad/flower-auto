@@ -406,14 +406,16 @@ type pmdata =
   { pol : pol ; kind : kind; zone : zone }
 
 type amdata =
-  { name : name; mutable justifiber : gtree list }
+  { name : name;
+    mutable justifiber : gtree list;
+    mutable cojustifiber : gtree list; }
 
 and gtree = (pmdata, amdata) Itree.t
 
 type vehicle =
   { pos : gtree list; neg : gtree list }
 
-let string_of_amdata { name; justifiber } : string =
+let string_of_amdata { name; justifiber; _ } : string =
   if not (List.is_empty justifiber) then
     Printf.sprintf "\027[1;32m%s\027[0m" name
   else
@@ -481,9 +483,20 @@ let garden (t : gtree) : gtree =
 
 let name (t : gtree) : name =
   (t |> atom |> Itree.leaf_data).name
+  
+let polarity (t : gtree) : pol =
+  (t |> Itree.node_data).pol
 
 let justifiber (t : gtree) : gtree list =
   (t |> atom |> Itree.leaf_data).justifiber
+
+let cojustifiber (t : gtree) : gtree list =
+  (t |> atom |> Itree.leaf_data).cojustifiber
+
+let fiber (t : gtree) : gtree list =
+  if t |> polarity |> positive
+  then justifiber t
+  else cojustifiber t
 
 let pistil (t : gtree) : gtree =
   Itree.child (flower t) 0
@@ -520,7 +533,16 @@ let eq_atom (t : gtree) (t' : gtree) : bool =
 
 let justify_atom (src : gtree) (tgt : gtree) : unit =
   tgt.data <- Itree.(Leaf (node_data tgt,
-    { (leaf_data tgt) with justifiber = src :: justifiber tgt }))
+{ (leaf_data tgt) with justifiber = src :: justifiber tgt }))
+
+let unjustify_atom (src : gtree) (tgt : gtree) : unit =
+  tgt.data <- Itree.(Leaf (node_data tgt,
+{ (leaf_data tgt) with justifiber = List.remove_if (fun n -> n == src) (justifiber tgt) }))
+
+let cojustify_atom (src : gtree) (tgt : gtree) : unit =
+  tgt.data <- Itree.(Leaf (node_data tgt,
+    { (leaf_data tgt) with cojustifiber = src :: cojustifiber tgt }))
+  
 
 let eq_gtree (t : gtree) (t' : gtree) : bool =
   let eq_data d d' =
@@ -548,7 +570,7 @@ let garden_to_gtree (g : garden) : gtree =
   let rec build_f (index : int) (pmdata : pmdata) (f : flower) : gtree =
     match f with
     | Atom name ->
-        let data = Itree.Leaf ({ pmdata with kind = `Flower }, { name; justifiber = []; }) in
+        let data = Itree.Leaf ({ pmdata with kind = `Flower }, { name; justifiber = []; cojustifiber = [] }) in
         { parent = None; index; children = BatDynArray.create (); data }
     | Flower (p, ps) ->
         let children =
@@ -692,33 +714,97 @@ let decomposition (t : gtree) : unit =
         List.iter (fun c -> aux c; Itree.link t) (flowers t)
   in aux t
 
+(* Graph structure for checking acyclicity of vehicle during pollination *)
+  
+let update_cojustifibers (t : gtree) : unit =
+  let v = vehicle t in
+  v.pos |> List.iter begin fun p ->
+    v.neg |> List.iter begin fun n ->
+      if Itree.in_same_tree p n then begin
+        let anc = Itree.lca p n in
+        let { pol; kind; _ } = Itree.node_data anc in
+        let covalid =
+          let tgt_uncojustified = not (List.memq p (cojustifiber n)) in
+          tgt_uncojustified && begin
+            (* let garden_and_positive = kind = `Garden && positive pol in
+            garden_and_positive || begin *)
+              let flower_and_negative = kind = `Flower && negative pol in
+              flower_and_negative && begin
+                let pistil = pistil anc in
+                let src_top_pistil = BatDynArray.memq p pistil.children in
+                src_top_pistil
+              end
+            end
+          in
+        if covalid then cojustify_atom p n
+      end
+    end
+  end
+
+exception Cyclic of gtree * gtree list
+
+let vehicle_anchor_acyclic (t : gtree) : bool =
+  (* Depth-first traversal of the tree resulting from the transitive composition
+     of justifibers and cojustifibers *)
+  let check_acyclicity t : unit =
+    let stack = Stack.create () in
+    let branch = Stack.create () in
+    Stack.push t stack;
+    while not (Stack.is_empty stack) do
+      let current = Stack.pop stack in
+      Stack.push current branch;
+      fiber current |> List.iter begin fun a ->
+        let lbranch = branch |> Stack.to_seq |> List.of_seq in
+        if t == a then
+          raise (Cyclic (a, lbranch))
+        else
+          if not (List.memq a lbranch) then
+            Stack.push a stack
+      end
+    done
+  in
+  try check_acyclicity t; true
+  with Cyclic (a, branch) ->
+    (* Printf.printf
+      "Cyclic branch:\n%s occurs in\n%s\n"
+      (string_of_node a)
+      (branch |> List.map string_of_node |> String.concat " =>\n"); *)
+    false
+
 let pollination (t : gtree) : unit =
+  update_cojustifibers t;
   let v = vehicle t in
   v.pos |> List.iter begin fun p ->
     v.neg |> List.iter begin fun n ->
       if name p = name n && Itree.in_same_tree p n then begin
         let anc = Itree.lca p n in
         let { pol; kind; _ } = Itree.node_data anc in
-        let src, tgt = n, p in
 
         let valid =
-          let tgt_unjustified = not (List.memq src (justifiber tgt)) in
-          tgt_unjustified && begin
-            let garden_and_negative = kind = `Garden && negative pol in
-            garden_and_negative || begin
-              let flower_and_positive = kind = `Flower && positive pol in
-              flower_and_positive && begin
-                let pistil = pistil anc in
-                let src_top_pistil = BatDynArray.memq src pistil.children in
-                let src_in_petal = Itree.is_desc pistil tgt in
-                src_top_pistil || src_in_petal
+          justify_atom n p;
+          let acyclic = vehicle_anchor_acyclic n in
+          unjustify_atom n p;
+          if not acyclic then false
+          else begin
+            let tgt_unjustified = not (List.memq n (justifiber p)) in
+            tgt_unjustified && begin
+              let garden_and_negative = kind = `Garden && negative pol in
+              garden_and_negative || begin
+                let flower_and_positive = kind = `Flower && positive pol in
+                flower_and_positive && begin
+                  let pistil = pistil anc in
+                  let src_top_pistil = BatDynArray.memq n pistil.children in
+                  let src_in_petal = Itree.is_desc pistil p in
+                  src_top_pistil || src_in_petal
+                end
               end
             end
           end in
 
         if valid then begin
-          Printf.printf "[src]: %s\n" (string_of_node src);
-          Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+          let src, tgt = n, p in
+          (* Printf.printf "[src]: %s\n" (string_of_node src);
+          Printf.printf "[tgt]: %s\n" (string_of_node tgt); *)
           (* Compute path from ancestor to target *)
           let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
 
