@@ -773,7 +773,7 @@ let vehicle_anchor_acyclic (t : gtree) : bool =
       (branch |> List.map string_of_node |> String.concat " =>\n"); *)
     false
 
-exception FoundJustif
+exception FoundJustif of gtree * gtree
 
 let pollination (t : gtree) : unit =
   update_cojustifibers t;
@@ -785,6 +785,7 @@ let pollination (t : gtree) : unit =
           let anc = Itree.lca p n in
           let { pol; kind; _ } = Itree.node_data anc in
           let src, tgt = n, p in
+          let tgt_unjustified = not (List.memq src (justifiber tgt)) in
 
           let valid =
             justify_atom src tgt;
@@ -792,7 +793,6 @@ let pollination (t : gtree) : unit =
             unjustify_atom src tgt;
             if not acyclic then false
             else begin
-              let tgt_unjustified = not (List.memq src (justifiber tgt)) in
               tgt_unjustified && begin
                 let garden_and_negative = kind = `Garden && negative pol in
                 garden_and_negative || begin
@@ -807,25 +807,35 @@ let pollination (t : gtree) : unit =
               end
             end in
           
-          let classical = not valid && pol >= 2 in
+          let classical = tgt_unjustified && not valid && pol >= 2 in
           if classical then begin
+            Printf.printf "Classical justification:\n";
+            Printf.printf "[src]: %s\n" (string_of_node src);
+            Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+
             let root, path = Itree.root_path anc in
             let garden = path |> List.take 2 |> Itree.desc root in 
             let flower = path |> List.take 3 |> Itree.desc root in 
-            let flower_copy = Itree.deepcopy flower in
-            let flower_index = List.nth path 2 in
-            justify_atom src tgt;
-            Itree.insert_child garden flower_index flower_copy;
-            let src_copy = src |> Itree.path |> Itree.desc root in
-            let tgt_copy = tgt |> Itree.path |> Itree.desc root in
-            justify_atom src_copy tgt_copy;
-            (* Printf.printf "[classical] root = %s\n" (string_of_node root);
-            flush stdout; *)
+            let flower_copy = deepcopy_gtree flower in
+            Itree.insert_child garden 0 flower_copy;
+
+            let inhibate t =
+              let v = vehicle t in
+              v.pos |> List.iter begin fun p ->
+                v.neg |> List.iter begin fun n ->
+                  justify_atom n p
+                end
+              end in
+            inhibate flower;
+            inhibate flower_copy;
+
+            (* raise (FoundJustif (src, tgt)); *)
           end;
 
           if valid then begin
             Printf.printf "[src]: %s\n" (string_of_node src);
             Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+
             (* Compute path from ancestor to target *)
             let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
 
@@ -865,12 +875,13 @@ let pollination (t : gtree) : unit =
             Itree.remove_child parent new_tgt.index;
 
             justify_atom src tgt;
-            raise FoundJustif;
+            (* raise (FoundJustif (src, tgt)); *)
           end;
         end;
       end;
     end
-  end with FoundJustif -> ()
+  end
+  with FoundJustif _ -> ()
 
 (** Correctness criterion *)
 
@@ -933,7 +944,7 @@ let lifedeathcycle ?(printer = None) (t : gtree) : unit =
     | None -> ()
   in
   pollination t;
-  print "[pollination]: ";
+  print "[pollination]:   ";
   ideath ~printer t
 
 let ilifedeath ?(printer = None) =
