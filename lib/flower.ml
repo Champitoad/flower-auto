@@ -924,24 +924,24 @@ let gfixpoint iproc g =
   iproc t;
   gtree_to_garden t
 
-let lifecycle ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
+let lifecycle ?(classical = true) ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
   let print phase =
     match printer with
     | Some p -> Printf.printf "%s%s\n" phase (p t) 
     | None -> ()
   in
-  pollination ~log:logpoll t;
+  pollination ~classical ~log:logpoll t;
   print "[ P ]  ";
   reproduction t;
   print "[ R ]  ";
   decomposition t;
   print "[ D ]  "
 
-let ilife ?(printer = None) =
-  ifixpoint (lifecycle ~printer)
+let ilife ?(classical = true) ?(logpoll = false) ?(printer = None) =
+  ifixpoint (lifecycle ~classical ~logpoll ~printer)
 
-let life ?(printer = None) =
-  gfixpoint (ilife ~printer)
+let life ?(classical = true) ?(logpoll = false) ?(printer = None) =
+  gfixpoint (ilife ~classical ~logpoll ~printer)
 
 (* Variant lifedeath fixpoint: accounts for the interaction between reproduction
    and decomposition, by fixpointing them (deathcycle) before doing the next
@@ -981,5 +981,5 @@ let lifedeath ?(classical = true) ?(logpoll = false) ?(printer = None) =
   gfixpoint (ilifedeath ~classical ~logpoll ~printer)
 
 let check ?(classical = true) ?(logpoll = false) ?(printer = None) : garden -> bool =
-  (* life ~printer |>> List.is_empty *)
+  (* life ~classical ~logpoll ~printer |>> List.is_empty *)
   lifedeath ~classical ~logpoll ~printer |>> List.is_empty

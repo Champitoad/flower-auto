@@ -39,6 +39,7 @@ let lifeform ?(classical = true) ?(logpoll = false) ?(print = false) ?(printer =
     Printf.printf "Formula: %s\n" (Engine.Fo.Notation.f_toascii f);
     flush stdout;
     let g = Flower.of_form f in
+    (* let l = Flower.lifedeath ~classical ~logpoll ~printer g in *)
     let l = Flower.lifedeath ~classical ~logpoll ~printer g in
     if List.is_empty l then incr nb_valid;
     if print = List.is_empty l then begin
