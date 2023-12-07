@@ -31,6 +31,30 @@ let test_check ?(print = false) garden =
     end
   end
 
+let lifeform ?(logpoll = false) ?(print = false) ?(printer = None) (fs : Engine.Fo.form list) =
+  let open Utils in
+  let nb_correct = ref 0 in
+  fs |> List.iter begin fun f ->
+    Printf.printf "Formula: %s\n" (Engine.Fo.Notation.f_toascii f);
+    flush stdout;
+    let g = Flower.of_form f in
+    let l = Flower.lifedeath ~logpoll ~printer g in
+    if List.is_empty l then incr nb_correct;
+    if print = List.is_empty l then begin
+      Printf.printf "Original: %s\n" (Flower.string_of_garden g);
+      Printf.printf "%s\n" (Flower.(g |> garden_to_gtree |> vehicle |> string_of_vehicle));
+      Printf.printf "Reduced : %s\n" (Flower.string_of_garden l);
+      Printf.printf "%s\n" (Flower.(l |> garden_to_gtree |> vehicle |> string_of_vehicle));
+      print_newline ()
+    end
+  end;
+  let nb_total = List.length fs in
+  Printf.printf
+    "%n/%n (%.2f%%) correct flowers"
+    !nb_correct
+    nb_total
+    ((float_of_int !nb_correct) /. (float_of_int nb_total) *. 100.)
+
 let test_life ?(print = false) ?(printer = None) garden =
   let open Utils in
   let nb_correct = ref 0 in

@@ -31,5 +31,5 @@ _opam/
 .envrc
 .direnv
 .vscode
-test/*.out
-test/iltp
+test/**/*.out
+test/iltp/ILTP*

@@ -775,7 +775,7 @@ let vehicle_anchor_acyclic (t : gtree) : bool =
 
 exception FoundJustif of gtree * gtree
 
-let pollination (t : gtree) : unit =
+let pollination ?(log = false) (t : gtree) : unit =
   update_cojustifibers t;
   let v = vehicle t in 
   try begin
@@ -809,9 +809,11 @@ let pollination (t : gtree) : unit =
           
           let classical = tgt_unjustified && not valid && pol >= 2 in
           if classical then begin
-            Printf.printf "Classical justification:\n";
-            Printf.printf "[src]: %s\n" (string_of_node src);
-            Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+            if log then begin
+              Printf.printf "Classical justification:\n";
+              Printf.printf "[src]: %s\n" (string_of_node src);
+              Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+            end;
 
             let root, path = Itree.root_path anc in
             let garden = path |> List.take 2 |> Itree.desc root in 
@@ -833,8 +835,10 @@ let pollination (t : gtree) : unit =
           end;
 
           if valid then begin
-            Printf.printf "[src]: %s\n" (string_of_node src);
-            Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+            if log then begin
+              Printf.printf "[src]: %s\n" (string_of_node src);
+              Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+            end;
 
             (* Compute path from ancestor to target *)
             let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
@@ -900,13 +904,13 @@ let gfixpoint iproc g =
   iproc t;
   gtree_to_garden t
 
-let lifecycle ?(printer = None) (t : gtree) : unit =
+let lifecycle ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
   let print phase =
     match printer with
     | Some p -> Printf.printf "%s%s\n" phase (p t) 
     | None -> ()
   in
-  pollination t;
+  pollination ~log:logpoll t;
   print "[pollination]:   ";
   reproduction t;
   print "[reproduction]:  ";
@@ -937,22 +941,22 @@ let deathcycle ?(printer = None) (t : gtree) : unit =
 let ideath ?(printer = None) =
   ifixpoint (deathcycle ~printer)
 
-let lifedeathcycle ?(printer = None) (t : gtree) : unit =
+let lifedeathcycle ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
   let print phase =
     match printer with
     | Some p -> Printf.printf "%s%s\n" phase (p t) 
     | None -> ()
   in
-  pollination t;
+  pollination ~log:logpoll t;
   print "[pollination]:   ";
   ideath ~printer t
 
-let ilifedeath ?(printer = None) =
-  ifixpoint (lifedeathcycle ~printer)
+let ilifedeath ?(logpoll = false) ?(printer = None) =
+  ifixpoint (lifedeathcycle ~logpoll ~printer)
 
-let lifedeath ?(printer = None) =
-  gfixpoint (ilifedeath ~printer)
+let lifedeath ?(logpoll = false) ?(printer = None) =
+  gfixpoint (ilifedeath ~logpoll ~printer)
 
-let check ?(printer = None) : garden -> bool =
+let check ?(logpoll = false) ?(printer = None) : garden -> bool =
   (* life ~printer |>> List.is_empty *)
-  lifedeath ~printer |>> List.is_empty
+  lifedeath ~logpoll ~printer |>> List.is_empty

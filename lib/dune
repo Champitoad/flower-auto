@@ -1,7 +1,7 @@
 (library
  (name prover)
  (public_name prover)
- (libraries batteries engine))
+ (libraries batteries engine iltp))
 
 (env
   (dev

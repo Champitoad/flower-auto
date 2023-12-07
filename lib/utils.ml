@@ -67,3 +67,11 @@ let neg_to_zero n =
 
 let div_ceil (n : int) (m : int) =
   if n mod m > 0 then n / m + 1 else n / m
+
+let readfile (path : string) : string =
+  let ic = open_in path in
+  let n = in_channel_length ic in
+  let s = Bytes.create n in
+  really_input ic s 0 n;
+  close_in ic;
+  Bytes.to_string s

@@ -1,0 +1,13 @@
+(ocamllex lexer)
+
+(menhir
+  (modules parser)
+  (flags --explain --inspection --table --dump))
+
+(library
+  (name iltp)
+  (public_name prover.iltp)
+  (libraries engine menhirLib batteries)
+  (synopsis "Utilities for manipulating ILTP data")
+;  (flags -w -8)
+  )
