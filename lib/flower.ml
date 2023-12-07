@@ -773,85 +773,121 @@ let vehicle_anchor_acyclic (t : gtree) : bool =
       (branch |> List.map string_of_node |> String.concat " =>\n"); *)
     false
 
+exception FoundJustif
+
 let pollination (t : gtree) : unit =
   update_cojustifibers t;
-  let v = vehicle t in
-  v.pos |> List.iter begin fun p ->
-    v.neg |> List.iter begin fun n ->
-      if name p = name n && Itree.in_same_tree p n then begin
-        let anc = Itree.lca p n in
-        let { pol; kind; _ } = Itree.node_data anc in
+  let v = vehicle t in 
+  try begin
+    v.pos |> List.iter begin fun p ->
+      v.neg |> List.iter begin fun n ->
+        if name p = name n && Itree.in_same_tree p n then begin
+          let anc = Itree.lca p n in
+          let { pol; kind; _ } = Itree.node_data anc in
+          let src, tgt = n, p in
 
-        let valid =
-          justify_atom n p;
-          let acyclic = vehicle_anchor_acyclic n in
-          unjustify_atom n p;
-          if not acyclic then false
-          else begin
-            let tgt_unjustified = not (List.memq n (justifiber p)) in
-            tgt_unjustified && begin
-              let garden_and_negative = kind = `Garden && negative pol in
-              garden_and_negative || begin
-                let flower_and_positive = kind = `Flower && positive pol in
-                flower_and_positive && begin
-                  let pistil = pistil anc in
-                  let src_top_pistil = BatDynArray.memq n pistil.children in
-                  let src_in_petal = Itree.is_desc pistil p in
-                  src_top_pistil || src_in_petal
+          let valid =
+            justify_atom src tgt;
+            let acyclic = vehicle_anchor_acyclic src in
+            unjustify_atom src tgt;
+            if not acyclic then false
+            else begin
+              let tgt_unjustified = not (List.memq src (justifiber tgt)) in
+              tgt_unjustified && begin
+                let garden_and_negative = kind = `Garden && negative pol in
+                garden_and_negative || begin
+                  let flower_and_positive = kind = `Flower && positive pol in
+                  flower_and_positive && begin
+                    let pistil = pistil anc in
+                    let src_top_pistil = BatDynArray.memq src pistil.children in
+                    let src_in_petal = Itree.is_desc pistil tgt in
+                    src_top_pistil || src_in_petal
+                  end
                 end
               end
-            end
-          end in
-
-        if valid then begin
-          let src, tgt = n, p in
-          (* Printf.printf "[src]: %s\n" (string_of_node src);
-          Printf.printf "[tgt]: %s\n" (string_of_node tgt); *)
-          (* Compute path from ancestor to target *)
-          let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
-
-          let src_available =
-            let parent =
-              match kind with
-              | `Garden -> Option.get src.parent
-              | `Flower -> Option.get (Option.get src.parent).parent in
-            parent == anc in
-
-          let new_anc = ref anc in
-          let path_new_anc_tgt = ref path_anc_tgt in
-
-          (* If the source is not directly available at the top-level of the ancestor *)
-          if not src_available then begin
-            (* Make a copy of the direct subflower of the ancestor containing the target *)
-            let subflower =
-              let dist_from_anc =
-                match kind with
-                | `Flower -> 2
-                | `Garden -> 1 in
-              let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
-              deepcopy_gtree (Itree.desc anc path_from_anc) in
-
-            (* Attach the copy to its new location besides the source *)
-            new_anc := src.parent |> Option.get;
-            Itree.insert_child !new_anc 0 subflower;
-            let tl = match kind with
-              | `Garden -> List.tl path_anc_tgt
-              | `Flower -> List.tl (List.tl path_anc_tgt) in
-            path_new_anc_tgt := 0 :: tl;
+            end in
+          
+          let classical = not valid && pol >= 2 in
+          if classical then begin
+            let root, path = Itree.root_path anc in
+            let garden = path |> List.take 2 |> Itree.desc root in 
+            let flower = path |> List.take 3 |> Itree.desc root in 
+            let flower_copy = Itree.deepcopy flower in
+            let flower_index = List.nth path 2 in
+            justify_atom src tgt;
+            Itree.insert_child garden flower_index flower_copy;
+            let src_copy = src |> Itree.path |> Itree.desc root in
+            let tgt_copy = tgt |> Itree.path |> Itree.desc root in
+            justify_atom src_copy tgt_copy;
+            (* Printf.printf "[classical] root = %s\n" (string_of_node root);
+            flush stdout; *)
           end;
 
-          (* Remove the (copy of) the target *)
-          let new_tgt = Itree.desc !new_anc !path_new_anc_tgt in
-          let parent = new_tgt.parent |> Option.get in
-          Itree.remove_child parent new_tgt.index;
+          if valid then begin
+            Printf.printf "[src]: %s\n" (string_of_node src);
+            Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+            (* Compute path from ancestor to target *)
+            let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
 
-          justify_atom src tgt;
+            let src_available =
+              let parent =
+                match kind with
+                | `Garden -> Option.get src.parent
+                | `Flower -> Option.get (Option.get src.parent).parent in
+              parent == anc in
+
+            let new_anc = ref anc in
+            let path_new_anc_tgt = ref path_anc_tgt in
+
+            (* If the source is not directly available at the top-level of the ancestor *)
+            if not src_available then begin
+              (* Make a copy of the direct subflower of the ancestor containing the target *)
+              let subflower =
+                let dist_from_anc =
+                  match kind with
+                  | `Flower -> 2
+                  | `Garden -> 1 in
+                let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
+                deepcopy_gtree (Itree.desc anc path_from_anc) in
+
+              (* Attach the copy to its new location besides the source *)
+              new_anc := src.parent |> Option.get;
+              Itree.insert_child !new_anc 0 subflower;
+              let tl = match kind with
+                | `Garden -> List.tl path_anc_tgt
+                | `Flower -> List.tl (List.tl path_anc_tgt) in
+              path_new_anc_tgt := 0 :: tl;
+            end;
+
+            (* Remove the (copy of) the target *)
+            let new_tgt = Itree.desc !new_anc !path_new_anc_tgt in
+            let parent = new_tgt.parent |> Option.get in
+            Itree.remove_child parent new_tgt.index;
+
+            justify_atom src tgt;
+            raise FoundJustif;
+          end;
         end;
       end;
     end
-  end
+  end with FoundJustif -> ()
 
 (** Correctness criterion *)
+
+(* Original life fixpoint *)
+
+let ifixpoint cycle (t : gtree) : unit =
+  let t' = ref (deepcopy_gtree t) in
+  cycle t;
+  while not (eq_gtree t !t') do
+    t' := deepcopy_gtree t;
+    cycle t;
+  done
+
+let gfixpoint iproc g =
+  let t = garden_to_gtree g in
+  iproc t;
+  gtree_to_garden t
 
 let lifecycle ?(printer = None) (t : gtree) : unit =
   let print phase =
@@ -866,15 +902,46 @@ let lifecycle ?(printer = None) (t : gtree) : unit =
   decomposition t;
   print "[decomposition]: "
 
-let life ?(printer = None) (g : garden) : garden =
-  let t = ref (garden_to_gtree g) in
-  let t' = ref (deepcopy_gtree !t) in
-  lifecycle ~printer !t;
-  while not (eq_gtree !t !t') do
-    t' := deepcopy_gtree !t;
-    lifecycle ~printer !t;
-  done;
-  gtree_to_garden !t
+let ilife ?(printer = None) =
+  ifixpoint (lifecycle ~printer)
+
+let life ?(printer = None) =
+  gfixpoint (ilife ~printer)
+
+(* Variant lifedeath fixpoint: accounts for the interaction between reproduction
+   and decomposition, by fixpointing them (deathcycle) before doing the next
+   pollination. Should solve goals faster and with less useless duplications. *)
+
+let deathcycle ?(printer = None) (t : gtree) : unit =
+  let print phase =
+    match printer with
+    | Some p -> Printf.printf "%s%s\n" phase (p t) 
+    | None -> ()
+  in
+  reproduction t;
+  print "[reproduction]:  ";
+  decomposition t;
+  print "[decomposition]: "
+
+let ideath ?(printer = None) =
+  ifixpoint (deathcycle ~printer)
+
+let lifedeathcycle ?(printer = None) (t : gtree) : unit =
+  let print phase =
+    match printer with
+    | Some p -> Printf.printf "%s%s\n" phase (p t) 
+    | None -> ()
+  in
+  pollination t;
+  print "[pollination]: ";
+  ideath ~printer t
+
+let ilifedeath ?(printer = None) =
+  ifixpoint (lifedeathcycle ~printer)
+
+let lifedeath ?(printer = None) =
+  gfixpoint (ilifedeath ~printer)
 
 let check ?(printer = None) : garden -> bool =
-  life ~printer |>> List.is_empty
+  (* life ~printer |>> List.is_empty *)
+  lifedeath ~printer |>> List.is_empty

@@ -35,7 +35,8 @@ let test_life ?(print = false) ?(printer = None) garden =
   let open Utils in
   let nb_correct = ref 0 in
   garden |> List.iter begin fun f ->
-    let l = Flower.life ~printer [f] in
+    (* let l = Flower.life ~printer [f] in *)
+    let l = Flower.lifedeath ~printer [f] in
     if List.is_empty l then incr nb_correct;
     if print = List.is_empty l then begin
       Printf.printf "Original: %s\n" (Flower.string_of_flower f);
