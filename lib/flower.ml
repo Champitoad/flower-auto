@@ -725,6 +725,7 @@ let decomposition (t : gtree) : unit =
 (* Graph structure for checking acyclicity of vehicle during pollination *)
   
 let update_cojustifibers (t : gtree) : unit =
+  Itree.link t;
   let v = vehicle t in
   v.pos |> List.iter begin fun p ->
     v.neg |> List.iter begin fun n ->
@@ -737,14 +738,19 @@ let update_cojustifibers (t : gtree) : unit =
             (* let garden_and_positive = kind = `Garden && positive pol in
             garden_and_positive || begin *)
               let flower_and_negative = kind = `Flower && negative pol in
-              flower_and_negative && begin
+              flower_and_negative
+              (* && begin
                 let pistil = pistil anc in
                 let src_top_pistil = BatDynArray.memq p pistil.children in
                 src_top_pistil
-              end
+              end *)
             end
           in
-        if covalid then cojustify_atom p n
+        if covalid then begin
+          cojustify_atom p n;
+          (* Printf.printf "p = %s\n" (string_of_node p);
+          Printf.printf "n = %s\n" (string_of_node n); *)
+        end
       end
     end
   end
@@ -782,7 +788,6 @@ let vehicle_anchor_acyclic (t : gtree) : bool =
 exception FoundJustif of gtree * gtree
 
 let pollination ?(classical = true) ?(log = false) (t : gtree) : unit =
-  update_cojustifibers t;
   let v = vehicle t in 
   try begin
     v.pos |> List.iter begin fun p ->
@@ -791,12 +796,14 @@ let pollination ?(classical = true) ?(log = false) (t : gtree) : unit =
           let anc = Itree.lca p n in
           let ancdata = Itree.node_data anc in
           let src, tgt = n, p in
-          let tgt_unjustified = not (List.memq src (justifiber tgt)) in
 
           let print_justif () =
             Printf.printf "-src-  %s\n" (string_of_node src);
             Printf.printf "-tgt-  %s\n" (string_of_node tgt);
             flush stdout; in
+
+          let tgt_unjustified = not (List.memq src (justifiber tgt)) in 
+          update_cojustifibers anc;
 
           let valid =
             justify_atom src tgt;
@@ -822,9 +829,6 @@ let pollination ?(classical = true) ?(log = false) (t : gtree) : unit =
               print_justif ();
             end;
 
-            (* Compute path from ancestor to target *)
-            let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
-
             let src_available =
               let parent =
                 match ancdata.kind with
@@ -832,23 +836,27 @@ let pollination ?(classical = true) ?(log = false) (t : gtree) : unit =
                 | `Flower -> Option.get (Option.get src.parent).parent in
               parent == anc in
 
+            (* Compute path from ancestor to target *)
+            let path_anc_tgt = Itree.path ~stop:(anc.parent) tgt in
             let new_anc = ref anc in
             let path_new_anc_tgt = ref path_anc_tgt in
 
             (* If the source is not directly available at the top-level of the ancestor *)
             if not src_available then begin
-              (* Make a copy of the direct subflower of the ancestor containing the target *)
-              let subflower =
+              (* Compute the direct subflower of the ancestor containing the target *)
+              let flower_tgt =
                 let dist_from_anc =
                   match ancdata.kind with
                   | `Flower -> 2
                   | `Garden -> 1 in
                 let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
-                deepcopy_gtree (Itree.desc anc path_from_anc) in
-
+                let subflower = Itree.desc anc path_from_anc in
+                subflower in
+              (* Make a copy of the direct subflower of the ancestor containing the target *)
+              let flower_tgt_copy = deepcopy_gtree flower_tgt in
               (* Attach the copy to its new location besides the source *)
               new_anc := src.parent |> Option.get;
-              Itree.insert_child !new_anc 0 subflower;
+              Itree.insert_child !new_anc 0 flower_tgt_copy;
               let tl = match ancdata.kind with
                 | `Garden -> List.tl path_anc_tgt
                 | `Flower -> List.tl (List.tl path_anc_tgt) in
@@ -947,8 +955,10 @@ let deathcycle ?(printer = None) (t : gtree) : unit =
   in
   reproduction t;
   print "[ R ]  ";
+  flush stdout;
   decomposition t;
-  print "[ D ]  "
+  print "[ D ]  ";
+  flush stdout
 
 let ideath ?(printer = None) =
   ifixpoint (deathcycle ~printer)
@@ -961,7 +971,8 @@ let lifedeathcycle ?(classical = true) ?(logpoll = false) ?(printer = None) (t :
   in
   ideath ~printer t;
   pollination ~classical ~log:logpoll t;
-  print "[ P ]  "
+  print "[ P ]  ";
+  flush stdout
 
 let ilifedeath ?(classical = true) ?(logpoll = false) ?(printer = None) =
   ifixpoint (lifedeathcycle ~classical ~logpoll ~printer)
