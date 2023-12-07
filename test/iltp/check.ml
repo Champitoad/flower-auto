@@ -40,7 +40,12 @@ let test_form () =
 let () =
   Printexc.record_backtrace true;
   
-  let logpoll = Array.mem "--logpoll" Sys.argv in
+  let classical = Array.mem "--classical" Sys.argv in
+  let logpoll = Array.mem "--justif" Sys.argv in
+  let printer =
+    if Array.mem "--phases" Sys.argv
+    then Some Flower.string_of_node
+    else None in
   
   let paths =
     try
@@ -54,11 +59,11 @@ let () =
         all_domain_paths domain
     with _ ->
       Printf.printf
-        "Usage: check --domain <domain> [--problem <problem>]\n";
+        "Usage: check --domain <domain> [--problem <problem>] [--classical] [--phases] [--justif]\n";
         exit 0 in
 
   let tautos = List.map parse_problem paths in
 
   (* Printf.printf "%s\n\n" (List.to_string ~sep:"\n" ~left:"" ~right:"" Engine.Fo.Notation.f_toascii tautos); *)
   (* Tests.test_life ~printer:(Some Flower.string_of_node) (List.concat_map Flower.of_form tautos) *)
-  Tests.lifeform ~logpoll tautos
+  Tests.lifeform ~classical ~logpoll ~printer tautos

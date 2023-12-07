@@ -487,6 +487,12 @@ let name (t : gtree) : name =
 let polarity (t : gtree) : pol =
   (t |> Itree.node_data).pol
 
+let kind (t : gtree) : kind =
+  (t |> Itree.node_data).kind
+
+let zone (t : gtree) : zone =
+  (t |> Itree.node_data).zone
+
 let justifiber (t : gtree) : gtree list =
   (t |> atom |> Itree.leaf_data).justifiber
 
@@ -775,7 +781,7 @@ let vehicle_anchor_acyclic (t : gtree) : bool =
 
 exception FoundJustif of gtree * gtree
 
-let pollination ?(log = false) (t : gtree) : unit =
+let pollination ?(classical = true) ?(log = false) (t : gtree) : unit =
   update_cojustifibers t;
   let v = vehicle t in 
   try begin
@@ -783,9 +789,14 @@ let pollination ?(log = false) (t : gtree) : unit =
       v.neg |> List.iter begin fun n ->
         if name p = name n && Itree.in_same_tree p n then begin
           let anc = Itree.lca p n in
-          let { pol; kind; _ } = Itree.node_data anc in
+          let ancdata = Itree.node_data anc in
           let src, tgt = n, p in
           let tgt_unjustified = not (List.memq src (justifiber tgt)) in
+
+          let print_justif () =
+            Printf.printf "-src-  %s\n" (string_of_node src);
+            Printf.printf "-tgt-  %s\n" (string_of_node tgt);
+            flush stdout; in
 
           let valid =
             justify_atom src tgt;
@@ -794,9 +805,9 @@ let pollination ?(log = false) (t : gtree) : unit =
             if not acyclic then false
             else begin
               tgt_unjustified && begin
-                let garden_and_negative = kind = `Garden && negative pol in
+                let garden_and_negative = ancdata.kind = `Garden && negative ancdata.pol in
                 garden_and_negative || begin
-                  let flower_and_positive = kind = `Flower && positive pol in
+                  let flower_and_positive = ancdata.kind = `Flower && positive ancdata.pol in
                   flower_and_positive && begin
                     let pistil = pistil anc in
                     let src_top_pistil = BatDynArray.memq src pistil.children in
@@ -806,38 +817,9 @@ let pollination ?(log = false) (t : gtree) : unit =
                 end
               end
             end in
-          
-          let classical = tgt_unjustified && not valid && pol >= 2 in
-          if classical then begin
-            if log then begin
-              Printf.printf "Classical justification:\n";
-              Printf.printf "[src]: %s\n" (string_of_node src);
-              Printf.printf "[tgt]: %s\n" (string_of_node tgt);
-            end;
-
-            let root, path = Itree.root_path anc in
-            let garden = path |> List.take 2 |> Itree.desc root in 
-            let flower = path |> List.take 3 |> Itree.desc root in 
-            let flower_copy = deepcopy_gtree flower in
-            Itree.insert_child garden 0 flower_copy;
-
-            let inhibate t =
-              let v = vehicle t in
-              v.pos |> List.iter begin fun p ->
-                v.neg |> List.iter begin fun n ->
-                  justify_atom n p
-                end
-              end in
-            inhibate flower;
-            inhibate flower_copy;
-
-            (* raise (FoundJustif (src, tgt)); *)
-          end;
-
           if valid then begin
             if log then begin
-              Printf.printf "[src]: %s\n" (string_of_node src);
-              Printf.printf "[tgt]: %s\n" (string_of_node tgt);
+              print_justif ();
             end;
 
             (* Compute path from ancestor to target *)
@@ -845,7 +827,7 @@ let pollination ?(log = false) (t : gtree) : unit =
 
             let src_available =
               let parent =
-                match kind with
+                match ancdata.kind with
                 | `Garden -> Option.get src.parent
                 | `Flower -> Option.get (Option.get src.parent).parent in
               parent == anc in
@@ -858,7 +840,7 @@ let pollination ?(log = false) (t : gtree) : unit =
               (* Make a copy of the direct subflower of the ancestor containing the target *)
               let subflower =
                 let dist_from_anc =
-                  match kind with
+                  match ancdata.kind with
                   | `Flower -> 2
                   | `Garden -> 1 in
                 let path_from_anc = List.split_at dist_from_anc path_anc_tgt |> fst in
@@ -867,7 +849,7 @@ let pollination ?(log = false) (t : gtree) : unit =
               (* Attach the copy to its new location besides the source *)
               new_anc := src.parent |> Option.get;
               Itree.insert_child !new_anc 0 subflower;
-              let tl = match kind with
+              let tl = match ancdata.kind with
                 | `Garden -> List.tl path_anc_tgt
                 | `Flower -> List.tl (List.tl path_anc_tgt) in
               path_new_anc_tgt := 0 :: tl;
@@ -879,6 +861,36 @@ let pollination ?(log = false) (t : gtree) : unit =
             Itree.remove_child parent new_tgt.index;
 
             justify_atom src tgt;
+            (* raise (FoundJustif (src, tgt)); *)
+          end;
+          
+          let valid_classical = tgt_unjustified && not valid && ancdata.pol >= 2 in
+          if classical && valid_classical then begin
+            if log then begin
+              Printf.printf "Classical justification:\n";
+              print_justif ();
+            end;
+            
+            (* Compute closest flower ancestor of lca with a parity of 1 *)
+            let it = ref anc in
+            while not (kind !it = `Flower && polarity !it = 1) do
+              it := Option.get !it.parent
+            done;
+            let flower = !it in
+            let garden = Option.get flower.parent in
+
+            let flower_copy = deepcopy_gtree flower in
+            Itree.insert_child garden 0 flower_copy;
+
+            let inhibate t =
+              let v = vehicle t in
+              v.pos |> List.iter begin fun p ->
+                v.neg |> List.iter begin fun n ->
+                  justify_atom n p
+                end
+              end in
+            inhibate flower;
+            inhibate flower_copy;
             (* raise (FoundJustif (src, tgt)); *)
           end;
         end;
@@ -911,11 +923,11 @@ let lifecycle ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
     | None -> ()
   in
   pollination ~log:logpoll t;
-  print "[pollination]:   ";
+  print "[ P ]  ";
   reproduction t;
-  print "[reproduction]:  ";
+  print "[ R ]  ";
   decomposition t;
-  print "[decomposition]: "
+  print "[ D ]  "
 
 let ilife ?(printer = None) =
   ifixpoint (lifecycle ~printer)
@@ -934,29 +946,29 @@ let deathcycle ?(printer = None) (t : gtree) : unit =
     | None -> ()
   in
   reproduction t;
-  print "[reproduction]:  ";
+  print "[ R ]  ";
   decomposition t;
-  print "[decomposition]: "
+  print "[ D ]  "
 
 let ideath ?(printer = None) =
   ifixpoint (deathcycle ~printer)
 
-let lifedeathcycle ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
+let lifedeathcycle ?(classical = true) ?(logpoll = false) ?(printer = None) (t : gtree) : unit =
   let print phase =
     match printer with
     | Some p -> Printf.printf "%s%s\n" phase (p t) 
     | None -> ()
   in
-  pollination ~log:logpoll t;
-  print "[pollination]:   ";
-  ideath ~printer t
+  ideath ~printer t;
+  pollination ~classical ~log:logpoll t;
+  print "[ P ]  "
 
-let ilifedeath ?(logpoll = false) ?(printer = None) =
-  ifixpoint (lifedeathcycle ~logpoll ~printer)
+let ilifedeath ?(classical = true) ?(logpoll = false) ?(printer = None) =
+  ifixpoint (lifedeathcycle ~classical ~logpoll ~printer)
 
-let lifedeath ?(logpoll = false) ?(printer = None) =
-  gfixpoint (ilifedeath ~logpoll ~printer)
+let lifedeath ?(classical = true) ?(logpoll = false) ?(printer = None) =
+  gfixpoint (ilifedeath ~classical ~logpoll ~printer)
 
-let check ?(logpoll = false) ?(printer = None) : garden -> bool =
+let check ?(classical = true) ?(logpoll = false) ?(printer = None) : garden -> bool =
   (* life ~printer |>> List.is_empty *)
-  lifedeath ~logpoll ~printer |>> List.is_empty
+  lifedeath ~classical ~logpoll ~printer |>> List.is_empty
