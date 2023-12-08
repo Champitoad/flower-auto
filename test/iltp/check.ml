@@ -59,7 +59,7 @@ let () =
         all_domain_paths domain
     with _ ->
       Printf.printf
-        "Usage: check --domain <domain> [--problem <problem>] [--classical] [--phases] [--justif]\n";
+        "Usage: check --domain <domain> [--problem <identifier>] [--classical] [--phases] [--justif]\n";
         exit 0 in
 
   let tautos = List.map parse_problem paths in
