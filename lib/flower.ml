@@ -48,9 +48,17 @@ and string_of_garden g =
 let rec latex_of_flower = function
   | Atom a -> a
   | Flower (p, ps) ->
+      let petals =
+        match ps with
+        | [] -> ""
+        | _ ->
+            (ps |>
+             List.map (latex_of_garden |>> fun s -> s ^ "\\sep") |>
+             String.concat " ") ^ "\\!"
+      in
       Printf.sprintf "(\\flower{%s}{%s})"
-        (latex_of_garden p)
-        (ps |> List.map (latex_of_garden |>> fun s -> s ^ "\\sep") |> String.concat " ")
+        (latex_of_garden p) petals
+        
 
 and latex_of_garden g =
   (* if List.is_empty g then "{}" else *)

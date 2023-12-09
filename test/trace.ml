@@ -72,7 +72,7 @@ let latex_array_of_trace (init : garden) (trace : trace) : string =
 let lifecycle_trace (t : gtree) : garden * garden =
   pollination t;
   let p = deepcopy_gtree t in
-  deathcycle t;
+  ideath t;
   let r = deepcopy_gtree t in
   (gtree_to_garden p, gtree_to_garden r)
 
@@ -143,4 +143,5 @@ let () =
   %s
 \end{mathpar}|} traces
   in
-  Printf.printf "%s%s" string_traces latex_traces
+  (* Printf.printf "%s%s" string_traces latex_traces *)
+  Printf.printf "%s" latex_traces

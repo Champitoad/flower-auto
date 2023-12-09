@@ -1,6 +1,6 @@
-# Connecteurs
+# Connectives
 
-## Didacticiel
+## Tutorial
 
 ### Implication
 
@@ -8,7 +8,7 @@ A, B, C |- A -> B -> A
 A, B, C |- A -> (A -> B) -> B
 A, B, C |- (B -> C) -> (A -> B) -> (A -> C)
 
-### Conjonction
+### Conjunction
 
 A, B, C |- A -> B -> A && B
 A, B, C |- A -> B -> C -> A && (B && C)
@@ -16,7 +16,7 @@ A, B, C |- (A && B) -> (C -> A)
 A, B, C |- (A && B) -> (C -> B)
 A, B, C |- (A && B) -> (B && A)
 
-### Disjonction
+### Disjunction
 
 A, B |- A -> A || B
 A, B |- B -> A || B
@@ -24,82 +24,70 @@ A, B, C |- B -> A || (B || C)
 A, B |- A || B -> (A -> B) -> B
 A, B |- A || B -> (B || A)
 
-### Négation
+### Negation
 
 A |- false -> ~A
 A |- ~A -> A -> false
 A |- A -> ~~A
 A |- false -> A
 A, B |- ~A -> A -> B
+A, B, C |- A -> (C -> ~B) -> (A -> B) -> ~C
+A, B |- (A -> B) && (A -> ~B) -> ~A
+A, B |- (A || ~B) && B -> A
+A, B |- ~A || B -> A -> B
+A, B |- (A -> B) -> (~B -> ~A)
 
-## Exercices
+## Exercises
 
-### Basiques
+### Constructive logic
 
 A, B, C |- A && B -> C -> A
-P, Q, R |- P && Q -> R -> Q && R
-
-### Logique constructiviste
-
+A, B, C |- A && B -> C -> B && C
 A, B |- A -> A && (A || B)
-P, Q, R |- P || (Q && R) -> P || Q
+A, B, C |- A || (B && C) -> A || B
 A, B |- A || B -> (A -> B) -> B
 A, B, C |- (A -> B -> C) -> ((A -> B) -> A -> C)
-P, Q, R |- (P -> Q -> R) -> P && Q -> R
+A, B, C |- (A -> B -> C) -> A && B -> C
 A, B, C |- (A -> B) -> (A -> C) -> A -> B && C
 A, B, C |- (A -> B) -> A || C -> B || C
 A, B |- (A && B) || (A || B) -> A || B
 A, B, C |- (A -> C) && (B -> C) -> A || B -> C
 A, B |- ~A || B -> A -> B
 A, B, C |- (A -> B -> C) -> A && B -> C
-P, Q, R |- P -> (P -> Q) -> ((P -> Q) -> (Q -> R)) -> R
+A, B, C |- A -> (A -> B) -> ((A -> B) -> (B -> C)) -> C
 A, B, C |- (A && B -> C) <-> A -> B -> C
 A, B, C |- (A || B -> C) <-> (A -> C) && (B -> C)
 
-### Associativités
+### Associativity
 
 A, B, C |- A && (B && C) <-> (A && B) && C
 A, B, C |- A || (B || C) <-> (A || B) || C
 
-### Raisonnements
+### Distributivity
 
-A, B |- (A -> B) -> (~B -> ~A)
-
-### Négations
-
-P, Q, R |- P -> (R -> ~Q) -> (P -> Q) -> ~R
-P, Q |- (P -> Q) && (P -> ~Q) -> ~P
-A, B |- (A || ~B) && B -> A
-P, Q |- ~P || Q -> P -> Q
-
-### Distributivités
-
-P, Q, R |- P && (Q -> R) -> P && Q -> P && R
-P, Q, R |- P && (Q || R) <-> (P && Q) || (P && R)
-P, Q, R |- P || (Q && R) <-> (P || Q) && (P || R)
-P, Q, R |- (P -> Q) && (P -> R) -> (P -> (Q && R))
-P, Q, R |- (P -> (Q && R)) -> (P -> Q) && (P -> R)
-P, Q, R |- (P -> Q) || (P -> R) -> (P -> (Q || R))
-P, Q, R |- (P -> (Q -> R)) -> ((P -> Q) -> (P -> R))
-P, Q, R |- ((P -> Q) -> (P -> R)) -> (P -> (Q -> R))
-
-### Relations
-
+A, B, C |- A && (B -> C) -> A && B -> A && C
+A, B, C |- A && (B || C) <-> (A && B) || (A && C)
+A, B, C |- A || (B && C) <-> (A || B) && (A || C)
+A, B, C |- (A -> B) && (A -> C) -> (A -> (B && C))
+A, B, C |- (A -> (B && C)) -> (A -> B) && (A -> C)
+A, B, C |- (A -> B) || (A -> C) -> (A -> (B || C))
+A, B, C |- (A -> (B -> C)) -> ((A -> B) -> (A -> C))
+A, B, C |- ((A -> B) -> (A -> C)) -> (A -> (B -> C))
 A, B, C |- (A || B -> C) <-> (A -> C) && (B -> C)
 
 ### Classical logic
 
-P, Q, R |- (P && Q -> P && R) -> P && (Q -> R)
-P, Q, R |- (P -> (Q || R)) -> (P -> Q) || (P -> R)
+A, B, C |- (A && B -> A && C) -> A && (B -> C)
+A, B, C |- (A -> (B || C)) -> (A -> B) || (A -> C)
 
-P, Q |- P || ~P
-P, Q |- P || (P -> Q)
-P, Q |- (P -> Q) || (Q -> P)
-P, Q |- ~~P -> P
-P, Q |- ((P -> Q) -> P) -> P
+A, B |- A || ~A
+A, B |- A || (A -> B)
+A, B |- (A -> B) || (B -> A)
+A, B |- ~~A -> A
+A, B |- ((A -> B) -> A) -> A
 
-P, Q |- ~~(P || ~P)
-P, Q |- ~~(P || (P -> Q))
-P, Q |- ~~((P -> Q) || (Q -> P))
-P, Q |- ~~(~~P -> P)
-P, Q |- ~~(((P -> Q) -> P) -> P)
+A, B |- ~~(A || ~A)
+A, B |- ~~(A || (A -> B))
+A, B |- ~~((A -> B) || (B -> A))
+A, B |- ~~(~~A -> A)
+A, B |- ~~(((A -> B) -> A) -> A)
