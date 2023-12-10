@@ -52,16 +52,18 @@ let rec latex_of_flower = function
         match ps with
         | [] -> ""
         | _ ->
-            (ps |>
-             List.map (latex_of_garden |>> fun s -> s ^ "\\sep") |>
-             String.concat " ") ^ "\\!"
-      in
+            ps |>
+            List.map begin fun g ->
+              if List.is_empty g
+              then "\\garden{}{}"
+              else latex_of_garden g
+            end |>
+            String.concat "\\sep " in
       Printf.sprintf "(\\flower{%s}{%s})"
         (latex_of_garden p) petals
         
 
 and latex_of_garden g =
-  (* if List.is_empty g then "{}" else *)
   List.to_string ~sep:", " ~left:"" ~right:"" latex_of_flower g
 
 let string_of_garden_path, string_of_flower_path =
